@@ -2,13 +2,13 @@ import os
 import torch
 import torchvision
 import torchvision.transforms as T
-import cv2
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
-from torch.optim import Adam, AdamW, SGD
 from argparse import ArgumentParser
 from data.dataset import MaskRCNNDataset
 from torch.utils.data import random_split, DataLoader
+
+from utils import get_iou, get_mcc, get_f1_score, get_optimiser
 
 
 def collate_fn(data):
@@ -52,30 +52,6 @@ def get_model(device):
         in_features, num_classes=2)
     model.to(device)
     return model
-
-
-def get_optimiser(optimiser, params):
-    optimiser = args.optimiser
-    if optimiser == "sgd":
-        optimiser = SGD(
-            params,
-            lr=args.learning_rate,
-            weight_decay=args.weight_decay,
-            momentum=args.momentum
-        )
-    elif optimiser == "adam":
-        optimiser = Adam(
-            params,
-            lr=args.learning_rate,
-            weight_decay=args.weight_decay
-        )
-    elif optimiser == "adamw":
-        optimiser = AdamW(
-            params,
-            lr=args.learning_rate,
-            weight_decay=args.weight_decay
-        )
-    return optimiser
 
 
 def train(
@@ -161,37 +137,6 @@ def perform_validation(model, val_dataloader, device):
     return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc}
 
 
-def get_intersection(pred, ground_truth):
-    return (pred * ground_truth).sum().to(torch.float32)
-
-
-def get_f1_score(pred, ground_truth):
-    intersection = get_intersection(pred, ground_truth)
-    f1_acc = (2 * intersection) / (ground_truth.sum() + pred.sum() + 1e-8)
-
-    return int(f1_acc)
-
-
-def get_iou(pred, ground_truth):
-    intersection = get_intersection(pred, ground_truth)
-    union = ground_truth.sum() + pred.sum() - intersection
-    iou = (intersection + 1e-8) / (union + 1e-8)
-
-    return int(iou)
-
-
-def get_mcc(pred, ground_truth):
-    tp = (pred * ground_truth).sum()
-    fp = (pred * (1 - ground_truth)).sum()
-    fn = ((1 - pred) * ground_truth).sum()
-    tn = ((1 - pred) * (1 - ground_truth)).sum()
-
-    numerator = tp * tn - fp * fn
-    denominator = ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5
-
-    return int(numerator / (denominator + 1e-8))
-
-
 if __name__ == "__main__":
     argparse = ArgumentParser(description='Hyperparameters for training the MaskRCNN model')
     argparse.add_argument("-e", "--num_epochs", type=int, default=500)
@@ -212,7 +157,7 @@ if __name__ == "__main__":
         args.batch_size, args.image_size, device)
     model = get_model(device)
     params = [p for p in model.parameters() if p.requires_grad]
-    optimiser = get_optimiser(args.optimiser, params)
+    optimiser = get_optimiser(args, params)
 
     num_epochs = args.num_epochs
     save_path = args.save_path
