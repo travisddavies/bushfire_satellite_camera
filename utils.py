@@ -1,4 +1,5 @@
 import torch
+from torch.optim import Adam, AdamW, SGD
 
 
 def get_intersection(pred, ground_truth):
@@ -30,3 +31,27 @@ def get_mcc(pred, ground_truth):
     denominator = ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5
 
     return int(numerator / (denominator + 1e-8))
+
+
+def get_optimiser(optimiser, params):
+    if optimiser == "sgd":
+        optimiser = SGD(
+            params,
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay,
+            momentum=args.momentum
+        )
+    elif optimiser == "adam":
+        optimiser = Adam(
+            params,
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay
+        )
+    elif optimiser == "adamw":
+        optimiser = AdamW(
+            params,
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay
+        )
+    return optimiser
+
