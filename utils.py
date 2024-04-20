@@ -1,5 +1,6 @@
 import torch
 from torch.optim import Adam, AdamW, SGD
+from argparse import ArgumentParser
 
 
 def get_intersection(pred, ground_truth):
@@ -56,3 +57,19 @@ def get_optimiser(args, params):
         )
     return optimiser
 
+
+def parse_args():
+    argparse = ArgumentParser(description='Hyperparameters for training the MaskRCNN model')
+    argparse.add_argument("-e", "--num_epochs", type=int, default=500)
+    argparse.add_argument("-p", "--patience", type=int, default=100)
+    argparse.add_argument("-l", "--learning_rate", type=float, default=0.001)
+    argparse.add_argument("-w", "--weight_decay", type=float, default=5e-4)
+    argparse.add_argument("-s", "--save_path", type=str,
+                          default="saved_models")
+    argparse.add_argument("-m", "--momentum", type=float, default=0.9)
+    argparse.add_argument("-o", "--optimiser", type=str,
+                          choices=["adam", "adamw", "sgd"], default="sgd")
+    argparse.add_argument("-b", "--batch_size", type=int, default=32)
+    argparse.add_argument("-i", "--image_size", type=int, default=1830)
+    args = argparse.parse_args()
+    return args
