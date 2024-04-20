@@ -14,7 +14,7 @@ def collate_fn(data):
     return data
 
 
-def get_data(batch_size):
+def get_data(batch_size, image_size, device):
     train_ratio = 0.7
 
     torch.manual_seed(42)
@@ -22,7 +22,7 @@ def get_data(batch_size):
         T.ToTensor()
     ])
 
-    full_dataset = ImageDataset(transform)
+    full_dataset = ImageDataset(transform, image_size, device)
     train_len = int(len(full_dataset) * train_ratio)
     val_test_len = len(full_dataset) - train_len
     val_len = val_test_len // 2
@@ -36,9 +36,9 @@ def get_data(batch_size):
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size,
                                   shuffle=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size,
-                                shuffle=False)
+                                shuffle=False, collate_fn=collate_fn)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size,
-                                 shuffle=False)
+                                 shuffle=False, collate_fn=collate_fn)
 
     return train_dataloader, val_dataloader, test_dataloader
 
@@ -87,7 +87,7 @@ def train(
     optimiser
 ):
     best_state_dict = None
-    best_loss = 0
+    best_iou = 0
     init_patience = 0
 
     for epoch in tqdm(range(num_epochs)):
@@ -97,11 +97,10 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            val_loss = acc_dict['loss']
-            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
-            if val_loss < best_loss:
+            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            if iou < best_iou:
                 init_patience = 0
-                best_loss = val_loss
+                best_iou = iou
                 best_state_dict = model.state_dict()
         if init_patience >= patience:
             break
@@ -117,6 +116,8 @@ def perform_train(model, train_dataloader, optimiser, device):
         batch = next(train_iter)
         images, targets = zip(*batch)
         images = list(images)
+        images = torch.stack(images)
+        images = images.to(device)
         targets = list(targets)
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
@@ -129,36 +130,34 @@ def perform_validation(model, val_dataloader, device):
     iou = 0
     mcc = 0
     n = 0
-    total_loss = 0
 
+    model.eval()
     val_iter = iter(val_dataloader)
-    for batch in next(val_iter):
-        images, targets = zip(*batch)
-        images, targets = list(images), list(targets)
-        images = torch.as_tensor(images, dtype=torch.float32)
-        targets = torch.as_tensor(targets)
-        images.to(device)
-        predictions = model(images)
+    with torch.no_grad():
+        for _ in range(len(val_dataloader)):
+            batch = next(val_iter)
+            images, targets = zip(*batch)
+            images, targets = list(images), list(targets)
+            images = torch.stack(images)
+            images = images.to(device)
+            predictions = model(images)
 
-        for target, prediction in zip(targets, predictions):
-            pred_masks = (prediction["masks"] > 0.5).byte()
-            gt_masks = target["masks"]
-            combined_pred_masks = torch.clamp(pred_masks.sum(dim=0), 0, 1)
-            combined_gt_masks = torch.clamp(gt_masks.sum(dim=0), 0, 1)
-            f1_score += get_f1_score(combined_pred_masks, combined_gt_masks)
-            iou += get_iou(combined_pred_masks, combined_gt_masks)
-            mcc += get_mcc(combined_pred_masks, combined_gt_masks)
-            n += 1
-
-        loss_dict = model(images, targets)
-        total_loss += sum(loss for loss in loss_dict.values())
+            for target, prediction in zip(targets, predictions):
+                pred_masks = (prediction["masks"] > 0.5).byte()
+                gt_masks = target["masks"]
+                combined_pred_masks = torch.clamp(pred_masks.sum(dim=0), 0, 1)
+                combined_gt_masks = torch.clamp(gt_masks.sum(dim=0), 0, 1)
+                combined_pred_masks = combined_pred_masks.squeeze(dim=0)
+                f1_score += get_f1_score(combined_pred_masks, combined_gt_masks)
+                iou += get_iou(combined_pred_masks, combined_gt_masks)
+                mcc += get_mcc(combined_pred_masks, combined_gt_masks)
+                n += 1
 
     av_f1 = f1_score / n
     av_iou = iou / n
     av_mcc = mcc / n
-    av_loss = total_loss / n
 
-    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc, 'loss': av_loss}
+    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc}
 
 
 def get_intersection(pred, ground_truth):
@@ -204,11 +203,12 @@ if __name__ == "__main__":
     argparse.add_argument("-o", "--optimiser", type=str,
                           choices=["adam", "adamw", "sgd"], default="sgd")
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
+    argparse.add_argument("-i", "--image_size", type=int, default=512)
     args = argparse.parse_args()
 
-    train_dataloader, val_dataloader, test_dataloader = get_data(
-        args.batch_size)
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+    train_dataloader, val_dataloader, test_dataloader = get_data(
+        args.batch_size, args.image_size, device)
     model = get_model(device)
     params = [p for p in model.parameters() if p.requires_grad]
     optimiser = get_optimiser(args.optimiser, params)
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     save_path = args.save_path
     patience = args.patience
     best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, save_path, patience, optimiser)
+                            num_epochs, device, patience, optimiser)
     if best_state_dict:
         torch.save(best_state_dict,
                    os.path.join(args.save_path, 'mask_rcnn.pth'))
