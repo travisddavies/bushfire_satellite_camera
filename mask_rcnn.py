@@ -2,11 +2,12 @@ import os
 import torch
 import torchvision
 import torchvision.transforms as T
+import cv2
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
 from torch.optim import Adam, AdamW, SGD
 from argparse import ArgumentParser
-from data.dataset import ImageDataset
+from data.dataset import MaskRCNNDataset
 from torch.utils.data import random_split, DataLoader
 
 
@@ -22,7 +23,7 @@ def get_data(batch_size, image_size, device):
         T.ToTensor()
     ])
 
-    full_dataset = ImageDataset(transform, image_size, device)
+    full_dataset = MaskRCNNDataset(transform, image_size, device)
     train_len = int(len(full_dataset) * train_ratio)
     val_test_len = len(full_dataset) - train_len
     val_len = val_test_len // 2
@@ -90,7 +91,7 @@ def train(
     best_iou = 0
     init_patience = 0
 
-    for epoch in tqdm(range(num_epochs)):
+    for epoch in range(num_epochs):
         perform_train(model, train_dataloader, optimiser, device)
         if epoch % 10 == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
@@ -112,13 +113,24 @@ def train(
 def perform_train(model, train_dataloader, optimiser, device):
     model.train()
     train_iter = iter(train_dataloader)
-    for i in range(len(train_dataloader)):
+    for i in tqdm(range(len(train_dataloader))):
         batch = next(train_iter)
         images, targets = zip(*batch)
         images = list(images)
         images = torch.stack(images)
         images = images.to(device)
         targets = list(targets)
+
+        if i == 0:
+            masks = targets[0]['masks']
+            bboxes = targets[0]['boxes']
+            for i in range(len(masks)):
+                mask = masks[i]
+                x1, y1, x2, y2 = bboxes[i]
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                img = mask.cpu().numpy()
+                cv2.imwrite(f'test_{i}.png', img)
+
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
@@ -203,7 +215,7 @@ if __name__ == "__main__":
     argparse.add_argument("-o", "--optimiser", type=str,
                           choices=["adam", "adamw", "sgd"], default="sgd")
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
-    argparse.add_argument("-i", "--image_size", type=int, default=512)
+    argparse.add_argument("-i", "--image_size", type=int, default=1830)
     args = argparse.parse_args()
 
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
