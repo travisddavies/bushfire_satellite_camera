@@ -120,17 +120,6 @@ def perform_train(model, train_dataloader, optimiser, device):
         images = torch.stack(images)
         images = images.to(device)
         targets = list(targets)
-
-        if i == 0:
-            masks = targets[0]['masks']
-            bboxes = targets[0]['boxes']
-            for i in range(len(masks)):
-                mask = masks[i]
-                x1, y1, x2, y2 = bboxes[i]
-                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                img = mask.cpu().numpy()
-                cv2.imwrite(f'test_{i}.png', img)
-
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
