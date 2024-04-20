@@ -33,7 +33,8 @@ def get_mcc(pred, ground_truth):
     return int(numerator / (denominator + 1e-8))
 
 
-def get_optimiser(optimiser, params):
+def get_optimiser(args, params):
+    optimiser = args.optimiser
     if optimiser == "sgd":
         optimiser = SGD(
             params,
