@@ -4,11 +4,10 @@ import torchvision
 import torchvision.transforms as T
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
-from argparse import ArgumentParser
 from data.dataset import MaskRCNNDataset
 from torch.utils.data import random_split, DataLoader
 
-from utils import get_iou, get_mcc, get_f1_score, get_optimiser
+from utils import get_iou, get_mcc, get_f1_score, get_optimiser, parse_args
 
 
 def collate_fn(data):
@@ -138,20 +137,7 @@ def perform_validation(model, val_dataloader, device):
 
 
 if __name__ == "__main__":
-    argparse = ArgumentParser(description='Hyperparameters for training the MaskRCNN model')
-    argparse.add_argument("-e", "--num_epochs", type=int, default=500)
-    argparse.add_argument("-p", "--patience", type=int, default=100)
-    argparse.add_argument("-l", "--learning_rate", type=float, default=0.001)
-    argparse.add_argument("-w", "--weight_decay", type=float, default=5e-4)
-    argparse.add_argument("-s", "--save_path", type=str,
-                          default="saved_models")
-    argparse.add_argument("-m", "--momentum", type=float, default=0.9)
-    argparse.add_argument("-o", "--optimiser", type=str,
-                          choices=["adam", "adamw", "sgd"], default="sgd")
-    argparse.add_argument("-b", "--batch_size", type=int, default=32)
-    argparse.add_argument("-i", "--image_size", type=int, default=1830)
-    args = argparse.parse_args()
-
+    args = parse_args()
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
     train_dataloader, val_dataloader, test_dataloader = get_data(
         args.batch_size, args.image_size, device)
