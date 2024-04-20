@@ -9,7 +9,7 @@ DATA_JSON = 'data/satellite_bushfire_json.json'
 IMAGE_DIR = 'data/prelim_dataset'
 
 
-class ImageDataset(Dataset):
+class BushfireDataset(Dataset):
     def __init__(self, transform, image_size, device):
         with open(DATA_JSON, 'r') as f:
             raw_json_data = json.load(f)
@@ -27,10 +27,15 @@ class ImageDataset(Dataset):
     def __len__(self):
         return len(self.filepaths)
 
+
+class MaskRCNNDataset(BushfireDataset):
+    def __init__(self, transform, image_size, device):
+        super().__init__(transform, image_size, device)
+
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
         img = cv2.imread(filepath)
-        mask = self._get_mask(idx, False, img.shape[0])
+        mask = self._get_mask(idx)
         objs = np.unique(mask)[1:]
         num_objs = len(objs)
         masks = self._get_mask_set(mask)
@@ -41,7 +46,7 @@ class ImageDataset(Dataset):
             masks = torch.empty((1, mask.shape[0], mask.shape[1]),
                                 dtype=torch.uint8)
         else:
-            bbox = self._get_bbox(idx)
+            bbox = self._get_bbox(masks)
             bbox = torch.as_tensor(bbox, dtype=torch.int64)
             labels = torch.ones((num_objs,), dtype=torch.int64)
             masks = torch.as_tensor(masks, dtype=torch.uint8)
@@ -49,15 +54,7 @@ class ImageDataset(Dataset):
                   'boxes': bbox.to(self.device),
                   'labels': labels.to(self.device)}
 
-        if bbox.shape[0] != labels.shape[0]:
-            print(len(self._get_regions(idx)))
-            print(num_objs)
-            print(filepath)
-            cv2.imwrite('weird_mask.png', mask)
-            self._get_mask(idx, True)
-        assert bbox.shape[0] == labels.shape[0], f"labels and boxes don't match, len(boxes) = {bbox.shape[0]} and len(labels) = {labels.shape[0]}"
-
-#        img = cv2.resize(img, (self.image_size, self.image_size))
+        img = cv2.resize(img, (self.image_size, self.image_size))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = self.transform(img)
 
@@ -73,9 +70,8 @@ class ImageDataset(Dataset):
 
         return regions_coords
 
-    def _get_mask(self, idx, test, image_size):
+    def _get_mask(self, idx):
         mask = np.zeros((self.image_size, self.image_size, 3), dtype=np.uint8)
-        mask = np.zeros((image_size, image_size, 3), dtype=np.uint8)
         regions = self._get_regions(idx)
         factor = len(regions)
         for i, region in enumerate(regions):
@@ -83,9 +79,7 @@ class ImageDataset(Dataset):
 
             region = np.array(region, dtype=np.int32)
             cv2.fillPoly(mask, [region], (colour_val, colour_val, colour_val))
-            if test:
-                print(f"colour_val: {colour_val}, region: {region}")
-                cv2.imwrite(f'test_{i}.png', mask)
+        cv2.resize(mask, (self.image_size, self.image_size))
 
         return mask
 
@@ -95,14 +89,16 @@ class ImageDataset(Dataset):
                           for instance_val in instance_vals], dtype=np.int32)
         if masks.ndim == 4:
             masks = masks[:, :, :, 0]
+
         return masks
 
-    def _get_bbox(self, idx):
+    def _get_bbox(self, masks):
         bboxes = []
-        regions = self._get_regions(idx)
-        for region in regions:
-            region = np.array(region, dtype=np.int32)
+        for mask in masks:
+            region, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
+                                                   method=cv2.CHAIN_APPROX_NONE)
             x, y, w, h = cv2.boundingRect(region)
             bboxes.append([x, y, x+w, y+h])
         bboxes = np.array(bboxes, dtype=np.int64)
+
         return bboxes
