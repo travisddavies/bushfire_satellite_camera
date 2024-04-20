@@ -7,6 +7,8 @@ import os
 
 DATA_JSON = 'data/satellite_bushfire_json.json'
 IMAGE_DIR = 'data/prelim_dataset'
+H = 1830
+W = 1830
 
 
 class BushfireDataset(Dataset):
@@ -27,6 +29,30 @@ class BushfireDataset(Dataset):
     def __len__(self):
         return len(self.filepaths)
 
+    def __getitem__(self, idx):
+        pass
+
+    def _get_regions(self, idx):
+        regions_coords = []
+        for region in self.annotations[idx]:
+            x_coords = region['shape_attributes']['all_points_x']
+            y_coords = region['shape_attributes']['all_points_y']
+            polygon = [[x, y] for x, y in zip(x_coords, y_coords)]
+            regions_coords.append(polygon)
+
+        return regions_coords
+
+    def _get_mask(self, idx, instance_seg):
+        mask = np.zeros((H, W, 3), dtype=np.uint8)
+        regions = self._get_regions(idx)
+        factor = len(regions)
+        for i, region in enumerate(regions):
+            colour_val = int(((i+1)/factor) * 255) if instance_seg else 255
+            region = np.array(region, dtype=np.int32)
+            cv2.fillPoly(mask, [region], (colour_val, colour_val, colour_val))
+        mask = cv2.resize(mask, (self.image_size, self.image_size))
+        return mask
+
 
 class MaskRCNNDataset(BushfireDataset):
     def __init__(self, transform, image_size, device):
@@ -35,7 +61,7 @@ class MaskRCNNDataset(BushfireDataset):
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
         img = cv2.imread(filepath)
-        mask = self._get_mask(idx)
+        mask = self._get_mask(idx, instance_seg=True)
         objs = np.unique(mask)[1:]
         num_objs = len(objs)
         masks = self._get_mask_set(mask)
@@ -54,51 +80,54 @@ class MaskRCNNDataset(BushfireDataset):
                   'boxes': bbox.to(self.device),
                   'labels': labels.to(self.device)}
 
-        img = cv2.resize(img, (self.image_size, self.image_size))
+        img = cv2.resize(img, (self.image_size, self.image_size),
+                         cv2.INTER_LINEAR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        assert mask.shape[:3] == img.shape[:3], f"mask shape {mask.shape[:3]} \
+                does not equal img shape {img.shape[:3]}"
+
         img = self.transform(img)
-
         return img, target
-
-    def _get_regions(self, idx):
-        regions_coords = []
-        for region in self.annotations[idx]:
-            x_coords = region['shape_attributes']['all_points_x']
-            y_coords = region['shape_attributes']['all_points_y']
-            polygon = [[x, y] for x, y in zip(x_coords, y_coords)]
-            regions_coords.append(polygon)
-
-        return regions_coords
-
-    def _get_mask(self, idx):
-        mask = np.zeros((self.image_size, self.image_size, 3), dtype=np.uint8)
-        regions = self._get_regions(idx)
-        factor = len(regions)
-        for i, region in enumerate(regions):
-            colour_val = int(((i+1)/factor) * 255)
-
-            region = np.array(region, dtype=np.int32)
-            cv2.fillPoly(mask, [region], (colour_val, colour_val, colour_val))
-        cv2.resize(mask, (self.image_size, self.image_size))
-
-        return mask
 
     def _get_mask_set(self, mask):
         instance_vals = np.unique(mask)[1:]
-        masks = np.array([np.where(mask == instance_val, 255, 0).astype(np.uint8)
-                          for instance_val in instance_vals], dtype=np.int32)
+        masks = np.array([self._get_instance(mask, instance_val)
+                          for instance_val in instance_vals], dtype=np.uint8)
         if masks.ndim == 4:
             masks = masks[:, :, :, 0]
 
         return masks
+
+    def _get_instance(self, mask, instance_val):
+        instance = np.where(mask == instance_val, 255, 0).astype(np.uint8)
+
+        return instance
 
     def _get_bbox(self, masks):
         bboxes = []
         for mask in masks:
             region, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
                                                    method=cv2.CHAIN_APPROX_NONE)
-            x, y, w, h = cv2.boundingRect(region)
+            x, y, w, h = cv2.boundingRect(region[0])
             bboxes.append([x, y, x+w, y+h])
         bboxes = np.array(bboxes, dtype=np.int64)
 
         return bboxes
+
+
+class SegFormerDataset(BushfireDataset):
+    def __init__(self, transform, image_size, device, processor):
+        super().__init__(transform, image_size, device)
+        self.processor = processor
+
+    def __getitem__(self, idx):
+        filepath = self.filepaths[idx]
+        img = cv2.imread(filepath)
+        mask = self._get_mask(idx, instance_seg=False)
+        encoded_inputs = self.processor(img, mask, return_tensors="pt")
+
+        for k, v in encoded_inputs.items():
+            encoded_inputs[k].squeeze_()
+
+        return encoded_inputs
