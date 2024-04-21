@@ -125,7 +125,7 @@ if __name__ == "__main__":
     patience = args.patience
 
     train_dataloader, val_dataloader, test_dataloader = get_data(
-        args.batch_size, args.image_size, device)
+        args.batch_size, args.image_size, device, model='segformer')
     model = get_model()
     optimiser = get_optimiser(args, model.parameters())
 

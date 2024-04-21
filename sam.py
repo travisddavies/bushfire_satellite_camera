@@ -53,7 +53,7 @@ if __name__ == "__main__":
     args = parse_args()
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
     train_dataloader, val_dataloader, test_dataloader = get_data(
-        args.batch_size, args.image_size, device)
+        args.batch_size, args.image_size, device, model='sam')
     model = get_model(device)
     params = [p for p in model.parameters() if p.requires_grad]
     optimiser = get_optimiser(args, params)
