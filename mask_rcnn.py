@@ -1,46 +1,15 @@
 import os
 import torch
 import torchvision
-import torchvision.transforms as T
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
-from data.dataset import MaskRCNNDataset
-from torch.utils.data import random_split, DataLoader
 
-from utils import get_iou, get_mcc, get_f1_score, get_optimiser, parse_args
+from utils import (get_iou, get_mcc, get_f1_score, get_optimiser, parse_args,
+                   get_data)
 
 
 def collate_fn(data):
     return data
-
-
-def get_data(batch_size, image_size, device):
-    train_ratio = 0.7
-
-    torch.manual_seed(42)
-    transform = T.Compose([
-        T.ToTensor()
-    ])
-
-    full_dataset = MaskRCNNDataset(transform, image_size, device)
-    train_len = int(len(full_dataset) * train_ratio)
-    val_test_len = len(full_dataset) - train_len
-    val_len = val_test_len // 2
-    test_len = val_test_len - val_len
-
-    train_dataset, val_test_dataset = random_split(
-        full_dataset, [train_len, val_test_len])
-    val_dataset, test_dataset = random_split(
-        val_test_dataset, [val_len, test_len])
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size,
-                                  shuffle=True, collate_fn=collate_fn)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size,
-                                shuffle=False, collate_fn=collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size,
-                                 shuffle=False, collate_fn=collate_fn)
-
-    return train_dataloader, val_dataloader, test_dataloader
 
 
 def get_model(device):

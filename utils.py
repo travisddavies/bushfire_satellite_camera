@@ -1,6 +1,13 @@
 import torch
+import torchvision.transforms as T
 from torch.optim import Adam, AdamW, SGD
+from torch.utils.data import random_split, DataLoader
+from transformers import SamProcessor, SegformerImageProcessor
 from argparse import ArgumentParser
+from data.dataset import (
+    MaskRCNNDataset,
+    SegmentAnythingDataset,
+    SegFormerDataset)
 
 
 def get_intersection(pred, ground_truth):
@@ -56,6 +63,43 @@ def get_optimiser(args, params):
             weight_decay=args.weight_decay
         )
     return optimiser
+
+
+def get_data(batch_size, image_size, device, model):
+    train_ratio = 0.7
+
+    torch.manual_seed(42)
+    transform = T.Compose([
+        T.ToTensor()
+    ])
+    if model == 'segformer':
+        processor = SegformerImageProcessor(do_reduce_labels=False)
+        full_dataset = SegFormerDataset(transform, image_size, device,
+                                        processor)
+    elif model == 'maskrcnn':
+        full_dataset = MaskRCNNDataset(transform, image_size, device)
+    elif model == 'sam':
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        full_dataset = SegmentAnythingDataset(transform, image_size, device,
+                                              processor)
+    train_len = int(len(full_dataset) * train_ratio)
+    val_test_len = len(full_dataset) - train_len
+    val_len = val_test_len // 2
+    test_len = val_test_len - val_len
+
+    train_dataset, val_test_dataset = random_split(
+        full_dataset, [train_len, val_test_len])
+    val_dataset, test_dataset = random_split(
+        val_test_dataset, [val_len, test_len])
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size,
+                                  shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size,
+                                shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size,
+                                 shuffle=False)
+
+    return train_dataloader, val_dataloader, test_dataloader
 
 
 def parse_args():
