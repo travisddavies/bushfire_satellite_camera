@@ -131,9 +131,7 @@ class SegFormerDataset(BushfireDataset):
         img = cv2.imread(filepath)
         mask = self._get_mask(idx, instance_seg=False)
         encoded_inputs = self.processor(img, mask, return_tensors="pt")
-
-        for k, v in encoded_inputs.items():
-            encoded_inputs[k].squeeze_()
+        encoded_inputs = {k: v.squeeze(0) for k, v in encoded_inputs.items()}
 
         return encoded_inputs
 
@@ -160,6 +158,6 @@ class SegmentAnythingDataset(BushfireInstanceSegmentationDataset):
         inputs = {k: v.squeeze(0) for k, v in inputs.items()}
 
         # add ground truth segmentation
-        inputs["ground_truth_mask"] = masks
+        inputs["ground_truth_mask"] = mask
 
         return inputs
