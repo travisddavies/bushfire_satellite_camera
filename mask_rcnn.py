@@ -95,6 +95,7 @@ def perform_train(model, train_dataloader, optimiser, device):
         images = torch.stack(images)
         images = images.to(device)
         targets = list(targets)
+        optimiser.zero_grad()
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
