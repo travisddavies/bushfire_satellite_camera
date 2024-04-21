@@ -54,7 +54,37 @@ class BushfireDataset(Dataset):
         return mask
 
 
-class MaskRCNNDataset(BushfireDataset):
+class BushfireInstanceSegmentationDataset(BushfireDataset):
+    def __init__(self, transform, image_size, device):
+        super().__init__(transform, image_size, device)
+
+    def _get_mask_set(self, mask):
+        instance_vals = np.unique(mask)[1:]
+        masks = np.array([self._get_instance(mask, instance_val)
+                          for instance_val in instance_vals], dtype=np.uint8)
+        if masks.ndim == 4:
+            masks = masks[:, :, :, 0]
+
+        return masks
+
+    def _get_instance(self, mask, instance_val):
+        instance = np.where(mask == instance_val, 255, 0).astype(np.uint8)
+
+        return instance
+
+    def _get_bbox(self, masks):
+        bboxes = []
+        for mask in masks:
+            region, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
+                                                   method=cv2.CHAIN_APPROX_NONE)
+            x, y, w, h = cv2.boundingRect(region[0])
+            bboxes.append([x, y, x+w, y+h])
+        bboxes = np.array(bboxes, dtype=np.int64)
+
+        return bboxes
+
+
+class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
     def __init__(self, transform, image_size, device):
         super().__init__(transform, image_size, device)
 
@@ -90,31 +120,6 @@ class MaskRCNNDataset(BushfireDataset):
         img = self.transform(img)
         return img, target
 
-    def _get_mask_set(self, mask):
-        instance_vals = np.unique(mask)[1:]
-        masks = np.array([self._get_instance(mask, instance_val)
-                          for instance_val in instance_vals], dtype=np.uint8)
-        if masks.ndim == 4:
-            masks = masks[:, :, :, 0]
-
-        return masks
-
-    def _get_instance(self, mask, instance_val):
-        instance = np.where(mask == instance_val, 255, 0).astype(np.uint8)
-
-        return instance
-
-    def _get_bbox(self, masks):
-        bboxes = []
-        for mask in masks:
-            region, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
-                                                   method=cv2.CHAIN_APPROX_NONE)
-            x, y, w, h = cv2.boundingRect(region[0])
-            bboxes.append([x, y, x+w, y+h])
-        bboxes = np.array(bboxes, dtype=np.int64)
-
-        return bboxes
-
 
 class SegFormerDataset(BushfireDataset):
     def __init__(self, transform, image_size, device, processor):
@@ -131,3 +136,30 @@ class SegFormerDataset(BushfireDataset):
             encoded_inputs[k].squeeze_()
 
         return encoded_inputs
+
+
+class SegmentAnythingDataset(BushfireInstanceSegmentationDataset):
+    def __init__(self, transform, image_size, device, processor):
+        super().__init__(transform, image_size, device, processor)
+        self.processor = processor
+
+    def __getitem__(self, idx):
+        filepath = self.filepaths[idx]
+        image = cv2.imread(filepath)
+        mask = self._get_mask(idx, instance_seg=True)
+        masks = self._get_mask_set(mask)
+        # get bounding box prompt
+        boxes = self._get_bbox(masks)
+        boxes = boxes.tolist()
+
+        # prepare image and prompt for the model
+        inputs = self.processor(image, input_boxes=[boxes],
+                                return_tensors="pt")
+
+        # remove batch dimension which the processor adds by default
+        inputs = {k: v.squeeze(0) for k, v in inputs.items()}
+
+        # add ground truth segmentation
+        inputs["ground_truth_mask"] = masks
+
+        return inputs
