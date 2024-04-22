@@ -2,29 +2,19 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import cv2
-import json
-import os
+import random
 
-DATA_JSON = 'data/satellite_bushfire_json.json'
-IMAGE_DIR = 'data/prelim_dataset'
 H = 1830
 W = 1830
 
 
 class BushfireDataset(Dataset):
-    def __init__(self, transform, image_size, device):
-        with open(DATA_JSON, 'r') as f:
-            raw_json_data = json.load(f)
-        filenames = [value['filename'] for value in raw_json_data.values()]
+    def __init__(self, filepaths, annotations, transform, image_size, device):
+        self.filepaths = filepaths
+        self.annotations = annotations
+        self.image_size = image_size
         self.device = device
         self.transform = transform
-        self.filepaths = [os.path.join(IMAGE_DIR, filename)
-                          for filename in filenames]
-        self.annotations = []
-        self.image_size = image_size
-        for value in raw_json_data.values():
-            regions = value['regions']
-            self.annotations.append(regions)
 
     def __len__(self):
         return len(self.filepaths)
@@ -50,15 +40,24 @@ class BushfireDataset(Dataset):
             colour_val = int(((i+1)/factor) * 255) if instance_seg else 1
             region = np.array(region, dtype=np.int32)
             cv2.fillPoly(mask, [region], (colour_val, colour_val, colour_val))
-        mask = cv2.resize(mask, (self.image_size, self.image_size))
         mask = mask[:, :, 0]
 
         return mask
 
+    def _get_random_crop_coords(self):
+        furthest_left = W - self.image_size
+        furthest_top = H - self.image_size
+        x1 = random.randint(0, furthest_left)
+        y1 = random.randint(0, furthest_top)
+        x2 = x1 + self.image_size
+        y2 = y1 + self.image_size
+
+        return x1, y1, x2, y2
+
 
 class BushfireInstanceSegmentationDataset(BushfireDataset):
-    def __init__(self, transform, image_size, device):
-        super().__init__(transform, image_size, device)
+    def __init__(self, filepaths, annotations, transform, image_size, device):
+        super().__init__(filepaths, annotations, transform, image_size, device)
 
     def _get_mask_set(self, mask):
         instance_vals = np.unique(mask)[1:]
@@ -85,13 +84,22 @@ class BushfireInstanceSegmentationDataset(BushfireDataset):
 
 
 class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
-    def __init__(self, transform, image_size, device):
-        super().__init__(transform, image_size, device)
+    def __init__(self, filepaths, annotations, transform, image_size, device,
+                 random_crop=False):
+        super().__init__(filepaths, annotations, transform, image_size, device)
+        self.random_crop = random_crop
 
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
         img = cv2.imread(filepath)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = self._get_mask(idx, instance_seg=True)
+        if self.random_crop:
+            x1, y1, x2, y2 = self._get_random_crop_coords()
+            img, mask = img[x1:x2, y1:y2], mask[x1:x2, y1:y2]
+        else:
+            img = cv2.resize(img, (self.image_size, self.image_size))
+            mask = cv2.resize(mask, (self.image_size, self.image_size))
         objs = np.unique(mask)[1:]
         num_objs = len(objs)
         masks = self._get_mask_set(mask)
@@ -110,12 +118,9 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
                   'boxes': bbox.to(self.device),
                   'labels': labels.to(self.device)}
 
-        img = cv2.resize(img, (self.image_size, self.image_size),
-                         cv2.INTER_LINEAR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        assert mask.shape[:2] == img.shape[:2], f"mask shape {mask.shape[:3]} \
-                does not equal img shape {img.shape[:3]}"
+        assert mask.shape[:2] == img.shape[:2], f"mask shape {mask.shape[:2]} \
+                does not equal img shape {img.shape[:2]}"
 
         img = self.transform(img)
 
@@ -123,14 +128,23 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
 
 
 class SegFormerDataset(BushfireDataset):
-    def __init__(self, transform, image_size, device, processor):
-        super().__init__(transform, image_size, device)
+    def __init__(self, filepaths, annotations, transform, image_size, device,
+                 processor, random_crop=False):
+        super().__init__(filepaths, annotations, transform, image_size, device)
         self.processor = processor
+        self.random_crop = True
 
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
         img = cv2.imread(filepath)
         mask = self._get_mask(idx, instance_seg=False)
+        if self.random_crop:
+            x1, y1, x2, y2 = self._get_random_crop_coords()
+            mask = mask[x1:x2, y1:y2]
+            img = img[x1:x2, y1:y2]
+        else:
+            img = cv2.resize(img, (self.image_size, self.image_size))
+            mask = cv2.resize(mask, (self.image_size, self.image_size))
         encoded_inputs = self.processor(img, mask, return_tensors="pt")
         encoded_inputs = {k: v.squeeze(0) for k, v in encoded_inputs.items()}
 

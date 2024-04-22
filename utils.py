@@ -1,13 +1,20 @@
+import os
+import json
 import torch
 import torchvision.transforms as T
 from torch.optim import Adam, AdamW, SGD
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 from transformers import SamProcessor, SegformerImageProcessor
 from argparse import ArgumentParser
+from sklearn.model_selection import train_test_split
+
 from data.dataset import (
     MaskRCNNDataset,
     SegmentAnythingDataset,
     SegFormerDataset)
+
+DATA_JSON = 'data/satellite_bushfire_json.json'
+IMAGE_DIR = 'data/prelim_dataset'
 
 
 def get_intersection(pred, ground_truth):
@@ -66,33 +73,60 @@ def get_optimiser(args, params):
 
 
 def get_data(batch_size, image_size, device, model):
-
+    with open(DATA_JSON, 'r') as f:
+        raw_json_data = json.load(f)
+    filenames = [value['filename'] for value in raw_json_data.values()]
+    filepaths = [os.path.join(IMAGE_DIR, filename) for filename in filenames]
+    annotations = []
+    image_size = image_size
+    for value in raw_json_data.values():
+        regions = value['regions']
+        annotations.append(regions)
     train_ratio = 0.7
 
-    torch.manual_seed(42)
+    train_filepaths, val_test_filepaths, train_annotations, val_test_annotations = train_test_split(
+        filepaths, annotations, train_size=train_ratio, random_state=42,
+        shuffle=True
+    )
+    val_filepaths, test_filepaths, val_annotations, test_annotations = train_test_split(
+        val_test_filepaths, val_test_annotations, test_size=0.5,
+        random_state=42, shuffle=True
 
+    )
     transform = T.Compose([
         T.ToTensor()
     ])
     if model == 'segformer':
         processor = SegformerImageProcessor(do_reduce_labels=False)
-        full_dataset = SegFormerDataset(transform, image_size, device,
+        train_dataset = SegFormerDataset(train_filepaths, train_annotations,
+                                         transform, image_size, device,
+                                         processor, random_crop=True)
+        val_dataset = SegFormerDataset(val_filepaths, val_annotations,
+                                       transform, image_size, device,
+                                       processor)
+        test_dataset = SegFormerDataset(test_filepaths, test_annotations,
+                                        transform, image_size, device,
                                         processor)
     elif model == 'mask_rcnn':
-        full_dataset = MaskRCNNDataset(transform, image_size, device)
+        train_dataset = MaskRCNNDataset(train_filepaths, train_annotations,
+                                        transform, image_size, device,
+                                        random_crop=True)
+        val_dataset = MaskRCNNDataset(val_filepaths, val_annotations,
+                                      transform, image_size, device)
+        test_dataset = MaskRCNNDataset(test_filepaths, test_annotations,
+                                       transform, image_size, device)
     elif model == 'sam':
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
-        full_dataset = SegmentAnythingDataset(transform, image_size, device,
+        train_dataset = SegmentAnythingDataset(train_filepaths,
+                                               train_annotations,
+                                               transform, image_size, device,
+                                               processor)
+        val_dataset = SegmentAnythingDataset(val_filepaths, val_annotations,
+                                             transform, image_size, device,
+                                             processor)
+        test_dataset = SegmentAnythingDataset(test_filepaths, test_annotations,
+                                              transform, image_size, device,
                                               processor)
-    train_len = int(len(full_dataset) * train_ratio)
-    val_test_len = len(full_dataset) - train_len
-    val_len = val_test_len // 2
-    test_len = val_test_len - val_len
-
-    train_dataset, val_test_dataset = random_split(
-        full_dataset, [train_len, val_test_len])
-    val_dataset, test_dataset = random_split(
-        val_test_dataset, [val_len, test_len])
 
     def collate_fn(data):
         return data
@@ -123,6 +157,5 @@ def parse_args():
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
     argparse.add_argument("-i", "--image_size", type=int, default=1830)
     argparse.add_argument("-v", "--validation_step", type=int, default=10)
-    argparse.add_argument("-f", "--flip_probability", type=float, default=0.5)
     args = argparse.parse_args()
     return args
