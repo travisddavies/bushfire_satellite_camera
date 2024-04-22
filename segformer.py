@@ -8,7 +8,7 @@ from utils import (parse_args, get_optimiser, get_f1_score, get_mcc, get_iou,
                    get_data)
 
 
-def get_model():
+def get_model(device):
     id2label = {
         0: "background",
         1: "object",
@@ -21,7 +21,7 @@ def get_model():
                                                              id2label=id2label,
                                                              label2id=label2id)
 
-    return model
+    return model.to(device)
 
 
 def train(
@@ -31,7 +31,8 @@ def train(
     num_epochs,
     device,
     patience,
-    optimiser
+    optimiser,
+    val_step
 ):
     best_state_dict = None
     best_iou = 0
@@ -39,7 +40,7 @@ def train(
 
     for epoch in range(num_epochs):
         perform_train(model, train_dataloader, optimiser, device)
-        if epoch % 10 == 0:
+        if epoch % val_step == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
@@ -58,12 +59,9 @@ def train(
 
 def perform_train(model, train_dataloader, optimiser, device):
     model.train()
-    train_iter = iter(train_dataloader)
-    for _ in tqdm(range(len(train_dataloader))):
-        batch = next(train_iter)
+    for batch in tqdm(train_dataloader):
         pixel_values = batch["pixel_values"].to(device)
         labels = batch["labels"].to(device)
-
         optimiser.zero_grad()
         outputs = model(pixel_values=pixel_values, labels=labels)
         loss = outputs.loss
@@ -110,9 +108,9 @@ def perform_validation(model, val_dataloader, device):
 
     avg_running_loss = running_loss / n
     accuracy = {}
-    accuracy['avg_f1'] = running_f1 / n
-    accuracy['avg_iou'] = running_iou / n
-    accuracy['avg_mcc'] = running_mcc / n
+    accuracy['f1'] = running_f1 / n
+    accuracy['iou'] = running_iou / n
+    accuracy['mcc'] = running_mcc / n
 
     return accuracy
 
@@ -123,14 +121,16 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     save_path = args.save_path
     patience = args.patience
+    val_step = args.validation_step
 
     train_dataloader, val_dataloader, test_dataloader = get_data(
         args.batch_size, args.image_size, device, model='segformer')
-    model = get_model()
+    model = get_model(device)
     optimiser = get_optimiser(args, model.parameters())
 
     best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, optimiser)
+                            num_epochs, device, patience, optimiser,
+                            val_step)
     if best_state_dict:
         torch.save(best_state_dict,
                    os.path.join(args.save_path, 'segformer.pth'))
