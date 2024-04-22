@@ -121,14 +121,21 @@ def perform_validation(model, val_dataloader, device):
 
 if __name__ == "__main__":
     args = parse_args()
-    device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
     num_epochs = args.num_epochs
     save_path = args.save_path
     patience = args.patience
     val_step = args.validation_step
+    flip_prob = args.flip_probability
+    batch_size = args.batch_size
+    image_size = args.image_size
+    device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
     train_dataloader, val_dataloader, test_dataloader = get_data(
-        args.batch_size, args.image_size, device, model='segformer')
+        batch_size,
+        image_size,
+        device,
+        model="segformer",
+        flip_prob=flip_prob)
     model = get_model(device)
     optimiser = get_optimiser(args, model.parameters())
 
