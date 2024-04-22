@@ -134,8 +134,7 @@ if __name__ == "__main__":
         batch_size,
         image_size,
         device,
-        model="segformer",
-        flip_prob=flip_prob)
+        model="segformer")
     model = get_model(device)
     optimiser = get_optimiser(args, model.parameters())
 

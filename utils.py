@@ -1,5 +1,5 @@
 import torch
-from transform import get_dual_transform
+import torchvision.transforms as T
 from torch.optim import Adam, AdamW, SGD
 from torch.utils.data import random_split, DataLoader
 from transformers import SamProcessor, SegformerImageProcessor
@@ -65,13 +65,15 @@ def get_optimiser(args, params):
     return optimiser
 
 
-def get_data(batch_size, image_size, device, model, flip_prob):
+def get_data(batch_size, image_size, device, model):
 
     train_ratio = 0.7
 
     torch.manual_seed(42)
 
-    transform = get_dual_transform(image_size, flip_prob)
+    transform = T.Compose([
+        T.ToTensor()
+    ])
     if model == 'segformer':
         processor = SegformerImageProcessor(do_reduce_labels=False)
         full_dataset = SegFormerDataset(transform, image_size, device,
@@ -119,8 +121,7 @@ def parse_args():
     argparse.add_argument("-o", "--optimiser", type=str,
                           choices=["adam", "adamw", "sgd"], default="sgd")
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
-    argparse.add_argument("-i", "--image_size", type=int, default=1830,
-                          choices=range(300, 1830))
+    argparse.add_argument("-i", "--image_size", type=int, default=1830)
     argparse.add_argument("-v", "--validation_step", type=int, default=10)
     argparse.add_argument("-f", "--flip_probability", type=float, default=0.5)
     args = argparse.parse_args()
