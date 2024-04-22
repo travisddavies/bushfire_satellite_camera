@@ -121,5 +121,6 @@ def parse_args():
                           choices=["adam", "adamw", "sgd"], default="sgd")
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
     argparse.add_argument("-i", "--image_size", type=int, default=1830)
+    argparse.add_argument("-v", "--validation_step", type=int, default=10)
     args = argparse.parse_args()
     return args
