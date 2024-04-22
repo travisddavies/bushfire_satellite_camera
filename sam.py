@@ -25,6 +25,7 @@ def train(
     num_epochs,
     device,
     patience,
+    val_step,
     optimiser
 ):
     init_patience = 0
@@ -33,12 +34,13 @@ def train(
     seg_loss = DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
     for epoch in range(num_epochs):
         perform_train(model, train_dataloader, optimiser, seg_loss, device)
-        if epoch % 10 == 0:
+        if epoch % val_step == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            val_loss = acc_dict['loss']
+            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -91,16 +93,15 @@ def perform_validation(model, dataloader, device, loss):
             running_f1 += get_f1_score(ground_truth_mask, medsam_seg)
             running_iou += get_iou(ground_truth_mask, medsam_seg)
             running_mcc += get_mcc(ground_truth_mask, medsam_seg)
-
             n += 1
 
-    avg_running_loss = running_loss / n
     accuracy = {}
-    accuracy['avg_f1'] = running_f1 / n
-    accuracy['avg_iou'] = running_iou / n
-    accuracy['avg_mcc'] = running_mcc / n
+    accuracy['f1'] = running_f1 / n
+    accuracy['iou'] = running_iou / n
+    accuracy['mcc'] = running_mcc / n
+    accuracy['loss'] = running_loss / n
 
-    return avg_running_loss, accuracy
+    return accuracy
 
 
 if __name__ == "__main__":
@@ -115,8 +116,9 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     save_path = args.save_path
     patience = args.patience
+    val_step = args.validation_step
     best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, optimiser)
+                            num_epochs, device, patience, val_step, optimiser)
     if best_state_dict:
         torch.save(best_state_dict,
                    os.path.join(args.save_path, 'sam_model.pth'))
