@@ -124,8 +124,8 @@ if __name__ == "__main__":
         batch_size,
         image_size,
         device,
-        model="mask_rcnn",
-        flip_prob=flip_prob)
+        model="mask_rcnn")
+
     model = get_model(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
