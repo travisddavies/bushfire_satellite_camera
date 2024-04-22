@@ -45,7 +45,8 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            val_loss = acc_dict['loss']
+            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -59,6 +60,7 @@ def train(
 
 def perform_train(model, train_dataloader, optimiser, device):
     model.train()
+    print('Training...')
     for batch in tqdm(train_dataloader):
         pixel_values = batch["pixel_values"].to(device)
         labels = batch["labels"].to(device)
@@ -79,6 +81,7 @@ def perform_validation(model, val_dataloader, device):
 
     n = 0
 
+    print('Validating...')
     with torch.no_grad():
         for batch in tqdm(val_dataloader):
             pixel_values = batch["pixel_values"].to(device)
@@ -106,11 +109,11 @@ def perform_validation(model, val_dataloader, device):
 
             n += 1
 
-    avg_running_loss = running_loss / n
     accuracy = {}
     accuracy['f1'] = running_f1 / n
     accuracy['iou'] = running_iou / n
     accuracy['mcc'] = running_mcc / n
+    accuracy['loss'] = running_loss / n
 
     return accuracy
 
