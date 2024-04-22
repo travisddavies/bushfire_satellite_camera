@@ -37,6 +37,7 @@ def get_mcc(pred, ground_truth):
 
     numerator = tp * tn - fp * fn
     denominator = ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5
+    denominator = denominator if not torch.isnan(denominator) else 0
 
     return int(numerator / (denominator + 1e-8))
 
