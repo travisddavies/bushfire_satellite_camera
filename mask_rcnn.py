@@ -39,7 +39,8 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            val_loss = acc_dict['loss']
+            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -71,6 +72,7 @@ def perform_validation(model, val_dataloader, device):
     f1_score = 0
     iou = 0
     mcc = 0
+    loss = 0
     n = 0
     print('Validating...')
     model.eval()
@@ -81,6 +83,8 @@ def perform_validation(model, val_dataloader, device):
             images = torch.stack(images)
             images = images.to(device)
             predictions = model(images)
+            loss_dict = model(images, targets)
+            loss += sum(loss for loss in loss_dict.values())
 
             for target, prediction in zip(targets, predictions):
                 pred_masks = (prediction["masks"] > 0.5).byte()
@@ -91,13 +95,15 @@ def perform_validation(model, val_dataloader, device):
                 f1_score += get_f1_score(combined_pred_masks, combined_gt_masks)
                 iou += get_iou(combined_pred_masks, combined_gt_masks)
                 mcc += get_mcc(combined_pred_masks, combined_gt_masks)
+
                 n += 1
 
     av_f1 = f1_score / n
     av_iou = iou / n
     av_mcc = mcc / n
+    av_loss = loss / n
 
-    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc}
+    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc, 'loss': av_loss}
 
 
 if __name__ == "__main__":
