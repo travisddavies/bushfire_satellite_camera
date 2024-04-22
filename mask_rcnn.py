@@ -32,13 +32,14 @@ def train(
     init_patience = 0
 
     for epoch in range(num_epochs):
+        print(f'Epoch {epoch}')
         perform_train(model, train_dataloader, optimiser, device)
         if epoch % 10 == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -52,9 +53,8 @@ def train(
 
 def perform_train(model, train_dataloader, optimiser, device):
     model.train()
-    train_iter = iter(train_dataloader)
-    for i in tqdm(range(len(train_dataloader))):
-        batch = next(train_iter)
+    print('Training...')
+    for batch in tqdm(train_dataloader):
         images, targets = zip(*batch)
         images = list(images)
         targets = list(targets)
@@ -72,12 +72,10 @@ def perform_validation(model, val_dataloader, device):
     iou = 0
     mcc = 0
     n = 0
-
+    print('Validating...')
     model.eval()
-    val_iter = iter(val_dataloader)
     with torch.no_grad():
-        for _ in range(len(val_dataloader)):
-            batch = next(val_iter)
+        for batch in tqdm(val_dataloader):
             images, targets = zip(*batch)
             images, targets = list(images), list(targets)
             images = torch.stack(images)
