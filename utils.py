@@ -66,6 +66,7 @@ def get_optimiser(args, params):
 
 
 def get_data(batch_size, image_size, device, model):
+
     train_ratio = 0.7
 
     torch.manual_seed(42)
@@ -92,12 +93,17 @@ def get_data(batch_size, image_size, device, model):
     val_dataset, test_dataset = random_split(
         val_test_dataset, [val_len, test_len])
 
+    def collate_fn(data):
+        return data
+
+    fn = collate_fn if model == 'mask_rcnn' else None
+
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size,
-                                  shuffle=True)
+                                  shuffle=True, collate_fn=fn)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size,
-                                shuffle=False)
+                                shuffle=False, collate_fn=fn)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size,
-                                 shuffle=False)
+                                 shuffle=False, collate_fn=fn)
 
     return train_dataloader, val_dataloader, test_dataloader
 

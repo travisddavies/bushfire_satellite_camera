@@ -8,10 +8,6 @@ from utils import (get_iou, get_mcc, get_f1_score, get_optimiser, parse_args,
                    get_data)
 
 
-def collate_fn(data):
-    return data
-
-
 def get_model(device):
     model = torchvision.models.detection.maskrcnn_resnet50_fpn_v2(
         weights="DEFAULT")
