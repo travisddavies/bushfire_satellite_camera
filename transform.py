@@ -1,5 +1,5 @@
 import torch
-from torchvision import transforms
+import torchvision.transforms as T
 
 
 class DualCompose:
@@ -14,7 +14,7 @@ class DualCompose:
 
 class DualToTensor:
     def __call__(self, img, mask):
-        return transforms.ToTensor()(img), torch.as_tensor(mask, dtype=torch.uint8)
+        return T.ToTensor()(img), torch.as_tensor(mask, dtype=torch.uint8)
 
 
 class DualRandomCrop:
@@ -22,10 +22,10 @@ class DualRandomCrop:
         self.size = size
 
     def __call__(self, img, mask):
-        i, j, h, w = transforms.RandomCrop.get_params(
+        i, j, h, w = T.RandomCrop.get_params(
             img, output_size=(self.size, self.size))
-        img_cropped = transforms.functional.crop(img, i, j, h, w)
-        mask_cropped = transforms.functional.crop(mask, i, j, h, w)
+        img_cropped = T.functional.crop(img, i, j, h, w)
+        mask_cropped = T.functional.crop(mask, i, j, h, w)
 
         return img_cropped, mask_cropped
 
@@ -35,8 +35,8 @@ class DualRandomHorizontalFlip:
         self.prob = p
 
     def __call__(self, img, mask):
-        img_flipped = transforms.RandomHorizontalFlip(self.prob)(img)
-        mask_flipped = transforms.RandomHorizontalFlip(self.prob)(mask)
+        img_flipped = T.RandomHorizontalFlip(self.prob)(img)
+        mask_flipped = T.RandomHorizontalFlip(self.prob)(mask)
 
         return img_flipped, mask_flipped
 
@@ -46,8 +46,8 @@ class DualRandomVerticalFlip:
         self.prob = p
 
     def __call__(self, img, mask):
-        img_flipped = transforms.RandomVerticalFlip(self.prob)(img)
-        mask_flipped = transforms.RandomVerticalFlip(self.prob)(mask)
+        img_flipped = T.RandomVerticalFlip(self.prob)(img)
+        mask_flipped = T.RandomVerticalFlip(self.prob)(mask)
 
         return img_flipped, mask_flipped
 
