@@ -39,6 +39,7 @@ def train(
     init_patience = 0
 
     for epoch in range(num_epochs):
+        print(f'Epoch {epoch}')
         perform_train(model, train_dataloader, optimiser, device)
         if epoch % val_step == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
@@ -46,7 +47,7 @@ def train(
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
             val_loss = acc_dict['loss']
-            print(f'Epoch: {epoch}. F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
+            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -100,8 +101,8 @@ def perform_validation(model, val_dataloader, device):
                                            mode='bilinear',
                                            align_corners=False)
 
-            seg = upsampled_logits.argmax(dim=1).float()
-            pred = (labels > 0.5).float()
+            seg = upsampled_logits.argmax(dim=1).double()
+            pred = (labels > 0.5).double()
 
             running_f1 += get_f1_score(pred, seg)
             running_iou += get_iou(pred, seg)
