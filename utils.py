@@ -76,7 +76,7 @@ def get_data(batch_size, image_size, device, model):
         processor = SegformerImageProcessor(do_reduce_labels=False)
         full_dataset = SegFormerDataset(transform, image_size, device,
                                         processor)
-    elif model == 'maskrcnn':
+    elif model == 'mask_rcnn':
         full_dataset = MaskRCNNDataset(transform, image_size, device)
     elif model == 'sam':
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
