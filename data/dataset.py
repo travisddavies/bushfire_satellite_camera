@@ -47,10 +47,12 @@ class BushfireDataset(Dataset):
         regions = self._get_regions(idx)
         factor = len(regions)
         for i, region in enumerate(regions):
-            colour_val = int(((i+1)/factor) * 255) if instance_seg else 255
+            colour_val = int(((i+1)/factor) * 255) if instance_seg else 1
             region = np.array(region, dtype=np.int32)
             cv2.fillPoly(mask, [region], (colour_val, colour_val, colour_val))
         mask = cv2.resize(mask, (self.image_size, self.image_size))
+        mask = mask[:, :, 0]
+
         return mask
 
 
@@ -62,13 +64,11 @@ class BushfireInstanceSegmentationDataset(BushfireDataset):
         instance_vals = np.unique(mask)[1:]
         masks = np.array([self._get_instance(mask, instance_val)
                           for instance_val in instance_vals], dtype=np.uint8)
-        if masks.ndim == 4:
-            masks = masks[:, :, :, 0]
 
         return masks
 
     def _get_instance(self, mask, instance_val):
-        instance = np.where(mask == instance_val, 255, 0).astype(np.uint8)
+        instance = np.where(mask == instance_val, 1, 0).astype(np.uint8)
 
         return instance
 
@@ -114,10 +114,11 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
                          cv2.INTER_LINEAR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        assert mask.shape[:3] == img.shape[:3], f"mask shape {mask.shape[:3]} \
+        assert mask.shape[:2] == img.shape[:2], f"mask shape {mask.shape[:3]} \
                 does not equal img shape {img.shape[:3]}"
 
         img = self.transform(img)
+
         return img, target
 
 
