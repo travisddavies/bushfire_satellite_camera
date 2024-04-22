@@ -40,7 +40,7 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
+            print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}.')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
