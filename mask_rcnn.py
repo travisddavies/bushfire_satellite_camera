@@ -25,6 +25,7 @@ def train(
     num_epochs,
     device,
     patience,
+    val_step,
     optimiser
 ):
     best_state_dict = None
@@ -34,13 +35,12 @@ def train(
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}')
         perform_train(model, train_dataloader, optimiser, device)
-        if epoch % 10 == 0:
+        if epoch % val_step == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            val_loss = acc_dict['loss']
-            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}. Loss: {val_loss}')
+            print(f'F1 score: {f1_score}. IOU: {iou}. MCC: {mcc}.')
             if iou < best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -53,6 +53,8 @@ def train(
 
 
 def perform_train(model, train_dataloader, optimiser, device):
+    total_loss = 0
+    n = 0
     model.train()
     print('Training...')
     for batch in tqdm(train_dataloader):
@@ -66,13 +68,17 @@ def perform_train(model, train_dataloader, optimiser, device):
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
         optimiser.step()
+        n += 1
+        total_loss += losses
+
+    av_train_loss = total_loss / n
+    print(f'Train loss: {av_train_loss}.')
 
 
 def perform_validation(model, val_dataloader, device):
     f1_score = 0
     iou = 0
     mcc = 0
-    loss = 0
     n = 0
     print('Validating...')
     model.eval()
@@ -83,8 +89,6 @@ def perform_validation(model, val_dataloader, device):
             images = torch.stack(images)
             images = images.to(device)
             predictions = model(images)
-            loss_dict = model(images, targets)
-            loss += sum(loss for loss in loss_dict.values())
 
             for target, prediction in zip(targets, predictions):
                 pred_masks = (prediction["masks"] > 0.5).byte()
@@ -101,9 +105,8 @@ def perform_validation(model, val_dataloader, device):
     av_f1 = f1_score / n
     av_iou = iou / n
     av_mcc = mcc / n
-    av_loss = loss / n
 
-    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc, 'loss': av_loss}
+    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc}
 
 
 if __name__ == "__main__":
@@ -118,8 +121,9 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     save_path = args.save_path
     patience = args.patience
+    val_step = args.validation_step
     best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, optimiser)
+                            num_epochs, device, patience, val_step, optimiser)
     if best_state_dict:
         torch.save(best_state_dict,
                    os.path.join(args.save_path, 'mask_rcnn.pth'))
