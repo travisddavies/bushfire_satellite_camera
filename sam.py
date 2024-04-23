@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.nn.functional import interpolate
 from transformers import SamModel
 from tqdm import tqdm
 from monai.losses import DiceCELoss
@@ -8,14 +9,14 @@ from utils import (parse_args, get_optimiser, get_f1_score, get_mcc, get_iou,
                    get_data)
 
 
-def get_model():
+def get_model(device):
     model = SamModel.from_pretrained("facebook/sam-vit-base")
 
     for name, param in model.named_parameters():
         if name.startswith("vision_encoder") or name.startswith("prompt_encoder"):
             param.requires_grad_(False)
 
-    return model
+    return model.to(device)
 
 
 def train(
@@ -35,7 +36,8 @@ def train(
     for epoch in range(num_epochs):
         perform_train(model, train_dataloader, optimiser, seg_loss, device)
         if epoch % val_step == 0:
-            acc_dict = perform_validation(model, val_dataloader, device)
+            acc_dict = perform_validation(model, val_dataloader, device,
+                                          seg_loss)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
@@ -55,15 +57,16 @@ def train(
 def perform_train(model, train_dataloader, optimiser, loss, device):
     model.train()
     for batch in tqdm(train_dataloader):
-        outputs = model(pixel_values=batch["pixel_values"].to(device),
+        outputs = model(pixel_values=batch['pixel_values'].to(device),
                         input_boxes=batch["input_boxes"].to(device),
                         multimask_output=False)
-
         predicted_masks = outputs.pred_masks.squeeze(1)
+        predicted_masks = interpolate(predicted_masks,
+                                      size=(args.image_size, args.image_size))
         ground_truth_masks = batch["ground_truth_mask"].float().to(device)
-        loss = loss(predicted_masks, ground_truth_masks.unsqueeze(1))
+        curr_loss = loss(predicted_masks, ground_truth_masks.unsqueeze(1))
         optimiser.zero_grad()
-        loss.backward()
+        curr_loss.backward()
         optimiser.step()
 
 
@@ -78,18 +81,22 @@ def perform_validation(model, dataloader, device, loss):
     with torch.no_grad():
         for batch in tqdm(dataloader):
             outputs = model(pixel_values=batch["pixel_values"].to(device),
-                            input_points=batch["input_points"].to(device),
+                            input_boxes=batch["input_boxes"].to(device),
                             multimask_output=False)
             predicted_masks = outputs.pred_masks.squeeze(1)
-            ground_truth_masks = batch["ground_truth_mask"].float().to(device)
-            loss = loss(predicted_masks, ground_truth_masks.unsqueeze(1))
-            running_loss += loss.item()
+            predicted_masks = interpolate(predicted_masks,
+                                          size=(args.image_size, args.image_size))
+            ground_truth_masks = batch["ground_truth_mask"].float()
+            ground_truth_masks = ground_truth_masks.to(device)
+            predicted_masks = predicted_masks.to(device)
+            curr_loss = loss(predicted_masks, ground_truth_masks.unsqueeze(1))
+            running_loss += curr_loss.item()
 
             medsam_seg_prob = torch.sigmoid(predicted_masks)
             medsam_seg_prob = medsam_seg_prob.squeeze()
             medsam_seg = (medsam_seg_prob > 0.9).to(torch.float32)
             ground_truth_mask = batch["ground_truth_mask"].squeeze()
-
+            ground_truth_mask, medsam_seg = ground_truth_mask.to(device), medsam_seg.to(device)
             running_f1 += get_f1_score(ground_truth_mask, medsam_seg)
             running_iou += get_iou(ground_truth_mask, medsam_seg)
             running_mcc += get_mcc(ground_truth_mask, medsam_seg)
