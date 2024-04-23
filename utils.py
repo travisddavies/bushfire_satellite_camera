@@ -120,7 +120,7 @@ def get_data(batch_size, image_size, device, model):
         train_dataset = SegmentAnythingDataset(train_filepaths,
                                                train_annotations,
                                                transform, image_size, device,
-                                               processor)
+                                               processor, random_crop=True)
         val_dataset = SegmentAnythingDataset(val_filepaths, val_annotations,
                                              transform, image_size, device,
                                              processor)
@@ -128,10 +128,13 @@ def get_data(batch_size, image_size, device, model):
                                               transform, image_size, device,
                                               processor)
 
-    def collate_fn(data):
+    def mask_rcnn_collate_fn(data):
         return data
 
-    fn = collate_fn if model == 'mask_rcnn' else None
+    if model == 'mask_rcnn':
+        fn = mask_rcnn_collate_fn
+    else:
+        fn = None
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size,
                                   shuffle=True, collate_fn=fn)
