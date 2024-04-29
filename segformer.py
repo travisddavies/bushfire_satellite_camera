@@ -103,7 +103,8 @@ def perform_validation(model, val_dataloader, device):
 
             seg = upsampled_logits.argmax(dim=1).double()
             pred = (labels > 0.5).double()
-
+            pred = pred.cpu().numpy()
+            seg = seg.cpu().numpy()
             running_f1 += get_f1_score(pred, seg)
             running_iou += get_iou(pred, seg)
             running_mcc += get_mcc(pred, seg)
