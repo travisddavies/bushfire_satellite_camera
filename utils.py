@@ -14,17 +14,16 @@ from data.dataset import (
     SegFormerDataset)
 
 DATA_JSON = 'data/satellite_bushfire_json.json'
-IMAGE_DIR = 'data/prelim_dataset'
+IMAGE_DIR = 'data/images'
 
 
 def get_intersection(pred, ground_truth):
-    return (pred * ground_truth).sum().to(torch.float32)
+    return (pred * ground_truth).sum()
 
 
 def get_f1_score(pred, ground_truth):
     intersection = get_intersection(pred, ground_truth)
     f1_acc = (2 * intersection) / (ground_truth.sum() + pred.sum() + 1e-8)
-
     return float(f1_acc)
 
 
@@ -77,6 +76,9 @@ def get_data(batch_size, image_size, device, model):
         raw_json_data = json.load(f)
     filenames = [value['filename'] for value in raw_json_data.values()]
     filepaths = [os.path.join(IMAGE_DIR, filename) for filename in filenames]
+    for i, filepath in enumerate(filepaths):
+        idx = filepath.find('_mask')
+        filepaths[i] = filepath[:idx] + '.jpg'
     annotations = []
     image_size = image_size
     for value in raw_json_data.values():
@@ -120,7 +122,7 @@ def get_data(batch_size, image_size, device, model):
         train_dataset = SegmentAnythingDataset(train_filepaths,
                                                train_annotations,
                                                transform, image_size, device,
-                                               processor, random_crop=True)
+                                               processor)
         val_dataset = SegmentAnythingDataset(val_filepaths, val_annotations,
                                              transform, image_size, device,
                                              processor)
