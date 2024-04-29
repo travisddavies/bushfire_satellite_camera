@@ -15,8 +15,6 @@ class BushfireDataset(Dataset):
         self.image_size = image_size
         self.device = device
         self.transform = transform
-        self.x1 = 0
-        self.y1 = 0
 
     def __len__(self):
         return len(self.filepaths)
@@ -54,9 +52,6 @@ class BushfireDataset(Dataset):
         x2 = x1 + self.image_size
         y2 = y1 + self.image_size
 
-        self.x1 = x1
-        self.y1 = y1
-
         return x1, y1, x2, y2
 
 
@@ -76,36 +71,12 @@ class BushfireInstanceSegmentationDataset(BushfireDataset):
 
         return instance
 
-    def _get_bbox(self, mask):
-        regions, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
-                                               method=cv2.CHAIN_APPROX_NONE)
-        if not regions:
-            x1 = self.x1
-            y1 = self.y1
-            return 0, 0, self.image_size, self.image_size
-
-        min_x = float('inf')
-        min_y = float('inf')
-        max_w = 0
-        max_h = 0
-
-        for region in regions:
-            x, y, w, h = cv2.boundingRect(region)
-            if x < min_x:
-                min_x = x
-            if y < min_y:
-                min_y = y
-            if w > max_w:
-                max_w = w
-            if h > max_h:
-                max_h = h
-
-            return min_x, min_y, max_w, max_h
-
-    def _get_bboxes(self, masks):
+    def _get_bbox(self, masks):
         bboxes = []
         for mask in masks:
-            x, y, w, h = self._get_bbox(mask)
+            region, _ = cv2.findContours(mask, mode=cv2.RETR_TREE,
+                                                   method=cv2.CHAIN_APPROX_NONE)
+            x, y, w, h = cv2.boundingRect(region[0])
             bboxes.append([x, y, x+w, y+h])
         bboxes = np.array(bboxes, dtype=np.int64)
 
@@ -139,7 +110,7 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
             masks = torch.empty((1, mask.shape[0], mask.shape[1]),
                                 dtype=torch.uint8)
         else:
-            bbox = self._get_bboxes(masks)
+            bbox = self._get_bbox(masks)
             bbox = torch.as_tensor(bbox, dtype=torch.int64)
             labels = torch.ones((num_objs,), dtype=torch.int64)
             masks = torch.as_tensor(masks, dtype=torch.uint8)
@@ -158,7 +129,7 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
 
 class SegFormerDataset(BushfireDataset):
     def __init__(self, filepaths, annotations, transform, image_size, device,
-                 processor, random_crop=False):
+                 processor, random_crop=True):
         super().__init__(filepaths, annotations, transform, image_size, device)
         self.processor = processor
         self.random_crop = True
@@ -181,35 +152,27 @@ class SegFormerDataset(BushfireDataset):
 
 
 class SegmentAnythingDataset(BushfireInstanceSegmentationDataset):
-    def __init__(self, filepaths, annotations, transform, image_size, device,
-                 processor, random_crop=False):
-        super().__init__(filepaths, annotations, transform, image_size, device)
+    def __init__(self, transform, image_size, device, processor):
+        super().__init__(transform, image_size, device, processor)
         self.processor = processor
-        self.random_crop = random_crop
 
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
         image = cv2.imread(filepath)
         mask = self._get_mask(idx, instance_seg=True)
-        if self.random_crop:
-            x1, y1, x2, y2 = self._get_random_crop_coords()
-            image = image[x1:x2, y1:y2]
-            mask = mask[x1:x2, y1:y2]
-        else:
-            image = cv2.resize(image, (self.image_size, self.image_size))
-            mask = cv2.resize(mask, (self.image_size, self.image_size))
+        masks = self._get_mask_set(mask)
         # get bounding box prompt
-        x1, y1, w, h = self._get_bbox(mask)
-        box = [x1, y1, x1+w, y1+h]
+        boxes = self._get_bbox(masks)
+        boxes = boxes.tolist()
 
         # prepare image and prompt for the model
-        inputs = self.processor(image, input_boxes=[[box]],
+        inputs = self.processor(image, input_boxes=[boxes],
                                 return_tensors="pt")
 
         # remove batch dimension which the processor adds by default
         inputs = {k: v.squeeze(0) for k, v in inputs.items()}
 
         # add ground truth segmentation
-        inputs["ground_truth_mask"] = torch.as_tensor(mask, dtype=torch.uint8)
+        inputs["ground_truth_mask"] = mask
 
         return inputs
