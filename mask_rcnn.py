@@ -70,7 +70,6 @@ def perform_train(model, train_dataloader, optimiser, device):
         optimiser.step()
         n += 1
         total_loss += losses
-
     av_train_loss = total_loss / n
     print(f'Train loss: {av_train_loss}.')
 
@@ -96,6 +95,8 @@ def perform_validation(model, val_dataloader, device):
                 combined_pred_masks = torch.clamp(pred_masks.sum(dim=0), 0, 1)
                 combined_gt_masks = torch.clamp(gt_masks.sum(dim=0), 0, 1)
                 combined_pred_masks = combined_pred_masks.squeeze(dim=0)
+                combined_gt_masks = combined_gt_masks.cpu().numpy()
+                combined_pred_masks = combined_pred_masks.cpu().numpy()
                 f1_score += get_f1_score(combined_pred_masks, combined_gt_masks)
                 iou += get_iou(combined_pred_masks, combined_gt_masks)
                 mcc += get_mcc(combined_pred_masks, combined_gt_masks)
