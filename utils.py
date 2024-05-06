@@ -1,17 +1,17 @@
 import os
 import json
-import torch
 import torchvision.transforms as T
 from torch.optim import Adam, AdamW, SGD
 from torch.utils.data import DataLoader
-from transformers import SamProcessor, SegformerImageProcessor
+from transformers import SegformerImageProcessor, MobileViTImageProcessor
 from argparse import ArgumentParser
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_fscore_support
 
 from data.dataset import (
     MaskRCNNDataset,
-    SegmentAnythingDataset,
-    SegFormerDataset)
+    SegFormerDataset,
+    MobileViTDataset)
 
 DATA_JSON = 'data/satellite_bushfire_json.json'
 IMAGE_DIR = 'data/images'
@@ -19,6 +19,14 @@ IMAGE_DIR = 'data/images'
 
 def get_intersection(pred, ground_truth):
     return (pred * ground_truth).sum()
+
+
+def get_precision_recall_f1_score(pred, ground_truth):
+    pred = pred.flatten()
+    ground_truth = ground_truth.flatten()
+    precision, recall, f1_score, _ = precision_recall_fscore_support(
+        ground_truth, pred)
+    return precision, recall, f1_score
 
 
 def get_f1_score(pred, ground_truth):
@@ -109,6 +117,18 @@ def get_data(batch_size, image_size, device, model):
         test_dataset = SegFormerDataset(test_filepaths, test_annotations,
                                         transform, image_size, device,
                                         processor)
+    if model == 'mobilevit':
+        processor = MobileViTImageProcessor(do_reduce_labels=False)
+        train_dataset = MobileViTDataset(train_filepaths, train_annotations,
+                                         transform, image_size, device,
+                                         processor, random_crop=True)
+        val_dataset = MobileViTDataset(val_filepaths, val_annotations,
+                                       transform, image_size, device,
+                                       processor)
+        test_dataset = MobileViTDataset(test_filepaths, test_annotations,
+                                        transform, image_size, device,
+                                        processor)
+
     elif model == 'mask_rcnn':
         train_dataset = MaskRCNNDataset(train_filepaths, train_annotations,
                                         transform, image_size, device,
@@ -117,18 +137,6 @@ def get_data(batch_size, image_size, device, model):
                                       transform, image_size, device)
         test_dataset = MaskRCNNDataset(test_filepaths, test_annotations,
                                        transform, image_size, device)
-    elif model == 'sam':
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
-        train_dataset = SegmentAnythingDataset(train_filepaths,
-                                               train_annotations,
-                                               transform, image_size, device,
-                                               processor)
-        val_dataset = SegmentAnythingDataset(val_filepaths, val_annotations,
-                                             transform, image_size, device,
-                                             processor)
-        test_dataset = SegmentAnythingDataset(test_filepaths, test_annotations,
-                                              transform, image_size, device,
-                                              processor)
 
     def mask_rcnn_collate_fn(data):
         return data
