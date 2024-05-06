@@ -151,28 +151,25 @@ class SegFormerDataset(BushfireDataset):
         return encoded_inputs
 
 
-class SegmentAnythingDataset(BushfireInstanceSegmentationDataset):
-    def __init__(self, transform, image_size, device, processor):
-        super().__init__(transform, image_size, device, processor)
+class MobileViTDataset(BushfireDataset):
+    def __init__(self, filepaths, annotations, transform, image_size, device,
+                 processor, random_crop=True):
+        super().__init__(filepaths, annotations, transform, image_size, device)
         self.processor = processor
+        self.random_crop = True
 
     def __getitem__(self, idx):
         filepath = self.filepaths[idx]
-        image = cv2.imread(filepath)
-        mask = self._get_mask(idx, instance_seg=True)
-        masks = self._get_mask_set(mask)
-        # get bounding box prompt
-        boxes = self._get_bbox(masks)
-        boxes = boxes.tolist()
+        img = cv2.imread(filepath)
+        mask = self._get_mask(idx, instance_seg=False)
+        if self.random_crop:
+            x1, y1, x2, y2 = self._get_random_crop_coords()
+            mask = mask[x1:x2, y1:y2]
+            img = img[x1:x2, y1:y2]
+        else:
+            img = cv2.resize(img, (self.image_size, self.image_size))
+            mask = cv2.resize(mask, (self.image_size, self.image_size))
+        encoded_inputs = self.processor(img, mask, return_tensors="pt")
+        encoded_inputs = {k: v.squeeze(0) for k, v in encoded_inputs.items()}
 
-        # prepare image and prompt for the model
-        inputs = self.processor(image, input_boxes=[boxes],
-                                return_tensors="pt")
-
-        # remove batch dimension which the processor adds by default
-        inputs = {k: v.squeeze(0) for k, v in inputs.items()}
-
-        # add ground truth segmentation
-        inputs["ground_truth_mask"] = mask
-
-        return inputs
+        return encoded_inputs
