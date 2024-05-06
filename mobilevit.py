@@ -5,7 +5,7 @@ from transformers import MobileViTForSemanticSegmentation
 from tqdm import tqdm
 
 from utils import (parse_args, get_optimiser, get_f1_score, get_mcc, get_iou,
-                   get_data)
+                   get_data, get_precision, get_recall)
 
 
 def get_model(device):
@@ -47,12 +47,22 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
+            precision = acc_dict['precision']
+            recall = acc_dict['recall']
             val_loss = acc_dict['loss']
-            print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}. Loss: {val_loss}')
+            print(f'F1 score: {f1_score:.3f}. '
+                  f'Recall score: {recall:.3f}. '
+                  f'Precision score: {precision:.3f}. '
+                  f'IOU: {iou:.3f}. '
+                  f'MCC: {mcc:.3f}. '
+                  f'Loss: {val_loss:.3f}. ')
             if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
                 best_state_dict = model.state_dict()
+                torch.save(best_state_dict,
+                           os.path.join(args.save_path, 'mobilevit.pth'))
+                print(f'Saved model at epoch {epoch}')
         if init_patience >= patience:
             break
         init_patience += 1
@@ -80,6 +90,8 @@ def perform_validation(model, val_dataloader, device):
     running_iou = 0.0
     running_mcc = 0.0
     running_loss = 0.0
+    running_recall = 0.0
+    running_precision = 0.0
 
     n = 0
 
@@ -109,6 +121,8 @@ def perform_validation(model, val_dataloader, device):
             running_f1 += get_f1_score(pred, seg)
             running_iou += get_iou(pred, seg)
             running_mcc += get_mcc(pred, seg)
+            running_precision += get_precision(pred, seg)
+            running_recall += get_recall(pred, seg)
 
             n += 1
 
@@ -117,6 +131,8 @@ def perform_validation(model, val_dataloader, device):
     accuracy['iou'] = running_iou / n
     accuracy['mcc'] = running_mcc / n
     accuracy['loss'] = running_loss / n
+    accuracy['precision'] = running_precision / n
+    accuracy['recall'] = running_recall / n
 
     return accuracy
 
@@ -144,4 +160,4 @@ if __name__ == "__main__":
                             val_step)
     if best_state_dict:
         torch.save(best_state_dict,
-                   os.path.join(args.save_path, 'segformer.pth'))
+                   os.path.join(args.save_path, 'mobilevit.pth'))
