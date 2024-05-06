@@ -1,6 +1,7 @@
 import os
 import json
 import torchvision.transforms as T
+import numpy as np
 from torch.optim import Adam, AdamW, SGD
 from torch.utils.data import DataLoader
 from transformers import SegformerImageProcessor, MobileViTImageProcessor
@@ -21,12 +22,16 @@ def get_intersection(pred, ground_truth):
     return (pred * ground_truth).sum()
 
 
-def get_precision_recall_f1_score(pred, ground_truth):
-    pred = pred.flatten()
-    ground_truth = ground_truth.flatten()
-    precision, recall, f1_score, _ = precision_recall_fscore_support(
-        ground_truth, pred)
-    return precision, recall, f1_score
+def get_precision(pred, ground_truth):
+    tp = get_intersection(pred, ground_truth)
+    fp = np.where((pred == 1) & (ground_truth == 0), 1, 0).sum()
+    return tp / (tp + fp + 1e-8)
+
+
+def get_recall(pred, ground_truth):
+    tp = get_intersection(pred, ground_truth)
+    fn = np.where((pred == 0) & (ground_truth == 1), 1, 0).sum()
+    return tp / (tp + fn + 1e-8)
 
 
 def get_f1_score(pred, ground_truth):
