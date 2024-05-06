@@ -160,3 +160,8 @@ cython_debug/
 #.idea/
 data/prelim_dataset/
 data/satellite_bushfire_json.json
+data/images/
+data/masks/
+masks_for_ppseg
+saved_models/
+saved_models/
