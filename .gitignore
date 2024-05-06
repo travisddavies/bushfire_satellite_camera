@@ -165,3 +165,6 @@ data/masks/
 masks_for_ppseg
 saved_models/
 saved_models/
+getting_mask_dataset.py
+shuffle_dataset.py
+ss/
