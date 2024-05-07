@@ -5,7 +5,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
 
 from utils import (get_iou, get_mcc, get_f1_score, get_optimiser, parse_args,
-                   get_data)
+                   get_data, get_precision, get_recall)
 
 
 def get_model(device):
@@ -58,7 +58,13 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
-            print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}.')
+            precision = acc_dict['precision']
+            recall = acc_dict['recall']
+            print(f'F1 score: {f1_score:.3f}. '
+                  f'Recall score: {recall:.3f}. '
+                  f'Precision score: {precision:.3f}. '
+                  f'IOU: {iou:.3f}. '
+                  f'MCC: {mcc:.3f}. ')
             if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -100,6 +106,8 @@ def perform_validation(model, val_dataloader, device):
     iou = 0
     mcc = 0
     n = 0
+    precision = 0
+    recall = 0
     print('Validating...')
     model.eval()
     with torch.no_grad():
@@ -121,14 +129,19 @@ def perform_validation(model, val_dataloader, device):
                 f1_score += get_f1_score(combined_pred_masks, combined_gt_masks)
                 iou += get_iou(combined_pred_masks, combined_gt_masks)
                 mcc += get_mcc(combined_pred_masks, combined_gt_masks)
+                precision += get_precision(combined_pred_masks, combined_gt_masks)
+                recall += get_recall(combined_pred_masks, combined_gt_masks)
 
                 n += 1
 
     av_f1 = f1_score / n
     av_iou = iou / n
     av_mcc = mcc / n
+    av_recall = recall / n
+    av_precision = precision / n
 
-    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc}
+    return {'f1': av_f1, 'iou': av_iou, 'mcc': av_mcc, 'recall': av_recall,
+            'precision': av_precision}
 
 
 if __name__ == "__main__":

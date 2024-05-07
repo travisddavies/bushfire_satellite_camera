@@ -3,7 +3,6 @@ import torch
 from torch.nn.functional import interpolate
 from transformers import MobileViTForSemanticSegmentation
 from tqdm import tqdm
-from torchinfo import summary
 
 from utils import (parse_args, get_optimiser, get_f1_score, get_mcc, get_iou,
                    get_data, get_precision, get_recall)
@@ -65,15 +64,15 @@ def train(
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
+            val_loss = acc_dict['loss']
             precision = acc_dict['precision']
             recall = acc_dict['recall']
-            val_loss = acc_dict['loss']
             print(f'F1 score: {f1_score:.3f}. '
-                  f'Recall score: {recall:.3f}. '
-                  f'Precision score: {precision:.3f}. '
                   f'IOU: {iou:.3f}. '
                   f'MCC: {mcc:.3f}. '
-                  f'Loss: {val_loss:.3f}. ')
+                  f'Precision: {precision:.3f}. '
+                  f'Recall: {recall:.3f}. '
+                  f'Loss: {val_loss}')
             if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
