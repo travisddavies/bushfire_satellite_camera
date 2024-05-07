@@ -15,7 +15,25 @@ def get_model(device):
     model.roi_heads.box_predictor = FastRCNNPredictor(
         in_features, num_classes=2)
     model.to(device)
-    return model
+
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() + param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() + buffer.element_size()
+    size_all = (param_size + buffer_size) / 1024**2
+
+    print(f'model size: {size_all:.3f}MB')
+
+    state_dict_path = os.path.join(os.getcwd(), args.save_path,
+                                   'mask_rcnn.pth')
+
+    if os.path.exists(state_dict_path):
+        print('Loading pretrained model')
+        model.load_state_dict(torch.load(state_dict_path))
+
+    return model.to(device)
 
 
 def train(
@@ -134,8 +152,16 @@ if __name__ == "__main__":
     params = [p for p in model.parameters() if p.requires_grad]
     optimiser = get_optimiser(args, params)
 
-    best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, val_step, optimiser)
-    if best_state_dict:
-        torch.save(best_state_dict,
-                   os.path.join(args.save_path, 'mask_rcnn.pth'))
+    if args.train_mode:
+        best_state_dict = train(model, train_dataloader, val_dataloader,
+                                num_epochs, device, patience, val_step,
+                                optimiser)
+        if best_state_dict:
+            torch.save(best_state_dict,
+                       os.path.join(args.save_path, 'mask_rcnn.pth'))
+    else:
+        acc_dict = perform_validation(model, val_dataloader, device)
+        f1_score = acc_dict['f1']
+        iou = acc_dict['iou']
+        mcc = acc_dict['mcc']
+        print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}.')

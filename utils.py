@@ -185,5 +185,6 @@ def parse_args():
     argparse.add_argument("-b", "--batch_size", type=int, default=32)
     argparse.add_argument("-i", "--image_size", type=int, default=1830)
     argparse.add_argument("-v", "--validation_step", type=int, default=10)
+    argparse.add_argument("-t", "--train_mode", action='store_true')
     args = argparse.parse_args()
     return args

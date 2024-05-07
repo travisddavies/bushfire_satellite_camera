@@ -21,6 +21,19 @@ def get_model(device):
                                                              id2label=id2label,
                                                              label2id=label2id)
 
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() + param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() + buffer.element_size()
+    size_all = (param_size + buffer_size) / 1024**2
+
+    print(f'model size: {size_all:.3f}MB')
+
+    model.load_state_dict(torch.load(os.path.join(args.save_path,
+                                                  'segformer-b5.pth')))
+
     return model.to(device)
 
 
@@ -138,9 +151,18 @@ if __name__ == "__main__":
     model = get_model(device)
     optimiser = get_optimiser(args, model.parameters())
 
-    best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, optimiser,
-                            val_step)
-    if best_state_dict:
-        torch.save(best_state_dict,
-                   os.path.join(args.save_path, 'segformer.pth'))
+    if args.train_mode:
+        best_state_dict = train(model, train_dataloader, val_dataloader,
+                                num_epochs, device, patience, val_step,
+                                optimiser)
+        if best_state_dict:
+            torch.save(best_state_dict,
+                       os.path.join(args.save_path, 'mask_rcnn.pth'))
+    else:
+        acc_dict = perform_validation(model, val_dataloader, device)
+        f1_score = acc_dict['f1']
+        iou = acc_dict['iou']
+        mcc = acc_dict['mcc']
+        loss = acc_dict['loss']
+        print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}. '
+              f'Loss: {loss:.3f}.')

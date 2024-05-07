@@ -17,6 +17,17 @@ from torchinfo import summary
 
 model = SamModel.from_pretrained("facebook/sam-vit-base")
 
+
+param_size = 0
+for param in model.parameters():
+    param_size += param.nelement() + param.element_size()
+buffer_size = 0
+for buffer in model.buffers():
+    buffer_size += buffer.nelement() + buffer.element_size()
+size_all = (param_size + buffer_size) / 1024**2
+
+print(f'model size: {size_all:.3f}MB')
+
 # make sure we only compute gradients for mask decoder
 for name, param in model.named_parameters():
     if name.startswith("vision_encoder") or name.startswith("prompt_encoder"):

@@ -15,6 +15,24 @@ def get_model(device):
     model = models.segmentation.deeplabv3_resnet50(pretrained=True,
                                                    progress=True)
     model.classifier = DeepLabHead(2048, 1)
+
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() + param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() + buffer.element_size()
+    size_all = (param_size + buffer_size) / 1024**2
+
+    print(f'model size: {size_all:.3f}MB')
+
+    state_dict_path = os.path.join(os.getcwd(), args.save_path,
+                                   'deeplabv3.pth')
+
+    if os.path.exists(state_dict_path):
+        print('Loading pretrained model')
+        model.load_state_dict(torch.load(state_dict_path))
+
     return model.to(device)
 
 
@@ -150,8 +168,19 @@ if __name__ == "__main__":
     params = [p for p in model.parameters() if p.requires_grad]
     optimiser = get_optimiser(args, params)
 
-    best_state_dict = train(model, train_dataloader, val_dataloader,
-                            num_epochs, device, patience, val_step, optimiser)
-    if best_state_dict:
-        torch.save(best_state_dict,
-                   os.path.join(args.save_path, 'deeplabv3.pth'))
+    if args.train_mode:
+        best_state_dict = train(model, train_dataloader, val_dataloader,
+                                num_epochs, device, patience, val_step,
+                                optimiser)
+        if best_state_dict:
+            torch.save(best_state_dict,
+                       os.path.join(args.save_path, 'deeplabv3.pth'))
+    else:
+        criterion = MSELoss()
+        acc_dict = perform_validation(model, val_dataloader, criterion, device)
+        f1_score = acc_dict['f1']
+        iou = acc_dict['iou']
+        mcc = acc_dict['mcc']
+        loss = acc_dict['loss']
+        print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}. '
+              f'Loss: {loss:.3f}. ')
