@@ -7,12 +7,13 @@ from torch.utils.data import DataLoader
 from transformers import SegformerImageProcessor, MobileViTImageProcessor
 from argparse import ArgumentParser
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_recall_fscore_support
 
 from data.dataset import (
     MaskRCNNDataset,
     SegFormerDataset,
-    MobileViTDataset)
+    MobileViTDataset,
+    DeepLabV3Dataset)
+
 
 DATA_JSON = 'data/satellite_bushfire_json.json'
 IMAGE_DIR = 'data/images'
@@ -142,6 +143,15 @@ def get_data(batch_size, image_size, device, model):
                                       transform, image_size, device)
         test_dataset = MaskRCNNDataset(test_filepaths, test_annotations,
                                        transform, image_size, device)
+
+    elif model == 'deeplabv3':
+        train_dataset = DeepLabV3Dataset(train_filepaths, train_annotations,
+                                         transform, image_size, device,
+                                         random_crop=True)
+        val_dataset = DeepLabV3Dataset(val_filepaths, val_annotations,
+                                       transform, image_size, device)
+        test_dataset = DeepLabV3Dataset(test_filepaths, test_annotations,
+                                        transform, image_size, device)
 
     def mask_rcnn_collate_fn(data):
         return data

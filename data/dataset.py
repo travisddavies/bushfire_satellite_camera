@@ -173,3 +173,24 @@ class MobileViTDataset(BushfireDataset):
         encoded_inputs = {k: v.squeeze(0) for k, v in encoded_inputs.items()}
 
         return encoded_inputs
+
+
+class DeepLabV3Dataset(BushfireDataset):
+    def __init__(self, filepaths, annotations, transform, image_size, device,
+                 random_crop=False):
+        super().__init__(filepaths, annotations, transform, image_size, device)
+        self.random_crop = random_crop
+
+    def __getitem__(self, idx):
+        filepath = self.filepaths[idx]
+        img = cv2.imread(filepath)
+        mask = self._get_mask(idx, instance_seg=False)
+        if self.random_crop:
+            x1, y1, x2, y2 = self._get_random_crop_coords()
+            mask = mask[x1:x2, y1:y2]
+            img = img[x1:x2, y1:y2]
+        else:
+            img = cv2.resize(img, (self.image_size, self.image_size))
+            mask = cv2.resize(mask, (self.image_size, self.image_size))
+        img = self.transform(img)
+        return img, mask
