@@ -41,10 +41,13 @@ def train(
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
             print(f'F1 score: {f1_score:.3f}. IOU: {iou:.3f}. MCC: {mcc:.3f}.')
-            if iou < best_iou:
+            if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
                 best_state_dict = model.state_dict()
+                torch.save(best_state_dict,
+                           os.path.join(args.save_path, 'mask_rcnn.pth'))
+                print(f'Saved model at epoch {epoch}')
         if init_patience >= patience:
             break
         init_patience += 1
