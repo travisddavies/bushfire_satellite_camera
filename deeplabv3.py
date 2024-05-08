@@ -1,6 +1,8 @@
 import os
 from time import time
 import torch
+import cv2
+import numpy as np
 
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from torchvision import models
@@ -41,6 +43,7 @@ def train(
     model,
     train_dataloader,
     val_dataloader,
+    test_dataset,
     num_epochs,
     device,
     patience,
@@ -77,6 +80,7 @@ def train(
                 torch.save(best_state_dict,
                            os.path.join(args.save_path, 'deeplabv3.pth'))
                 print(f'Saved model at epoch {epoch}')
+                store_prediction(model, test_dataset, device)
 
         if init_patience >= patience:
             break
@@ -148,6 +152,27 @@ def perform_validation(model, val_dataloader, criterion, device):
             'precision': av_precision, 'loss': av_loss}
 
 
+def store_prediction(model, test_dataset, device):
+    print('Storing predictions...')
+    model.eval()
+    with torch.no_grad():
+        for i in tqdm(range(len(test_dataset))):
+            img, _ = test_dataset[i]
+            img = img.unsqueeze(0).to(device)
+            mask_filepath = test_dataset.data[i][1]
+            mask_filename = mask_filepath.split('/')[-1]
+            savepath = os.path.join('results/deeplabv3', mask_filename)
+            output = model(img)
+            predictions = output['out']
+            predictions = predictions[:, 0].float()
+            for prediction in predictions:
+                pred_mask = (prediction > 0.5).byte()
+                pred_mask = pred_mask.cpu().numpy()
+                pred_mask = np.where(pred_mask > 0, 255, 0)
+                pred_mask = np.expand_dims(pred_mask, axis=-1)
+                cv2.imwrite(savepath, pred_mask)
+
+
 if __name__ == "__main__":
     args = parse_args()
     num_epochs = args.num_epochs
@@ -158,7 +183,7 @@ if __name__ == "__main__":
     image_size = args.image_size
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
-    train_dataloader, val_dataloader, test_dataloader = get_data(
+    train_dataloader, val_dataloader, test_dataloader, test_dataset = get_data(
         batch_size,
         image_size,
         device,
@@ -171,8 +196,8 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                num_epochs, device, patience, val_step,
-                                optimiser)
+                                test_dataset, num_epochs, device, patience,
+                                val_step, optimiser)
         if best_state_dict:
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'deeplabv3.pth'))
