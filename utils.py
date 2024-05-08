@@ -86,71 +86,77 @@ def get_optimiser(args, params):
 
 
 def get_data(batch_size, image_size, device, model):
-    with open(DATA_JSON, 'r') as f:
-        raw_json_data = json.load(f)
-    filenames = [value['filename'] for value in raw_json_data.values()]
-    filepaths = [os.path.join(IMAGE_DIR, filename) for filename in filenames]
-    for i, filepath in enumerate(filepaths):
-        idx = filepath.find('_mask')
-        filepaths[i] = filepath[:idx] + '.jpg'
-    annotations = []
-    image_size = image_size
-    for value in raw_json_data.values():
-        regions = value['regions']
-        annotations.append(regions)
-    train_ratio = 0.7
+    # with open(DATA_JSON, 'r') as f:
+        # raw_json_data = json.load(f)
+    # filenames = [value['filename'] for value in raw_json_data.values()]
+    # filepaths = [os.path.join(IMAGE_DIR, filename) for filename in filenames]
+    # for i, filepath in enumerate(filepaths):
+        # idx = filepath.find('_mask')
+        # filepaths[i] = filepath[:idx] + '.jpg'
+    # annotations = []
+    # image_size = image_size
+    # for value in raw_json_data.values():
+        # regions = value['regions']
+        # annotations.append(regions)
+    #train_ratio = 0.7
 
-    train_filepaths, val_test_filepaths, train_annotations, val_test_annotations = train_test_split(
-        filepaths, annotations, train_size=train_ratio, random_state=42,
-        shuffle=True
-    )
-    val_filepaths, test_filepaths, val_annotations, test_annotations = train_test_split(
-        val_test_filepaths, val_test_annotations, test_size=0.5,
-        random_state=42, shuffle=True
+    #train_filepaths, val_test_filepaths, train_annotations, val_test_annotations = train_test_split(
+        #filepaths, annotations, train_size=train_ratio, random_state=42,
+        # shuffle=True
+    # )
+    # val_filepaths, test_filepaths, val_annotations, test_annotations = train_test_split(
+        # val_test_filepaths, val_test_annotations, test_size=0.5,
+        # random_state=42, shuffle=True
 
-    )
+    # )
+    train_img_dir = 'data/images/train'
+    train_mask_dir = 'data/masks/train'
+    val_img_dir = 'data/images/val'
+    val_mask_dir = 'data/masks/val'
+    test_img_dir = 'data/images/test'
+    test_mask_dir = 'data/masks/test'
     transform = T.Compose([
         T.ToTensor()
     ])
     if model == 'segformer':
         processor = SegformerImageProcessor(do_reduce_labels=False)
-        train_dataset = SegFormerDataset(train_filepaths, train_annotations,
+        train_dataset = SegFormerDataset(train_img_dir, train_mask_dir,
                                          transform, image_size, device,
                                          processor, random_crop=True)
-        val_dataset = SegFormerDataset(val_filepaths, val_annotations,
+        val_dataset = SegFormerDataset(val_img_dir, val_mask_dir,
                                        transform, image_size, device,
                                        processor)
-        test_dataset = SegFormerDataset(test_filepaths, test_annotations,
+        test_dataset = SegFormerDataset(test_img_dir, test_mask_dir,
                                         transform, image_size, device,
                                         processor)
     if model == 'mobilevit':
         processor = MobileViTImageProcessor(do_reduce_labels=False)
-        train_dataset = MobileViTDataset(train_filepaths, train_annotations,
+        train_dataset = MobileViTDataset(train_img_dir, train_mask_dir,
                                          transform, image_size, device,
                                          processor, random_crop=True)
-        val_dataset = MobileViTDataset(val_filepaths, val_annotations,
+        val_dataset = MobileViTDataset(val_img_dir, val_mask_dir,
                                        transform, image_size, device,
                                        processor)
-        test_dataset = MobileViTDataset(test_filepaths, test_annotations,
+        test_dataset = MobileViTDataset(test_img_dir, test_mask_dir,
                                         transform, image_size, device,
                                         processor)
 
     elif model == 'mask_rcnn':
-        train_dataset = MaskRCNNDataset(train_filepaths, train_annotations,
+        train_dataset = MaskRCNNDataset(train_img_dir, train_mask_dir,
                                         transform, image_size, device,
                                         random_crop=True)
-        val_dataset = MaskRCNNDataset(val_filepaths, val_annotations,
+        val_dataset = MaskRCNNDataset(val_img_dir, val_mask_dir,
                                       transform, image_size, device)
-        test_dataset = MaskRCNNDataset(test_filepaths, test_annotations,
+        test_dataset = MaskRCNNDataset(test_img_dir, test_mask_dir,
                                        transform, image_size, device)
 
     elif model == 'deeplabv3':
-        train_dataset = DeepLabV3Dataset(train_filepaths, train_annotations,
+        train_dataset = DeepLabV3Dataset(train_img_dir, train_mask_dir,
                                          transform, image_size, device,
                                          random_crop=True)
-        val_dataset = DeepLabV3Dataset(val_filepaths, val_annotations,
+        val_dataset = DeepLabV3Dataset(val_img_dir, val_mask_dir,
                                        transform, image_size, device)
-        test_dataset = DeepLabV3Dataset(test_filepaths, test_annotations,
+        test_dataset = DeepLabV3Dataset(test_img_dir, test_mask_dir,
                                         transform, image_size, device)
 
     def mask_rcnn_collate_fn(data):
@@ -168,7 +174,7 @@ def get_data(batch_size, image_size, device, model):
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size,
                                  shuffle=False, collate_fn=fn)
 
-    return train_dataloader, val_dataloader, test_dataloader
+    return train_dataloader, val_dataloader, test_dataloader, test_dataset
 
 
 def parse_args():
