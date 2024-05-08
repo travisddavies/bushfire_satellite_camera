@@ -1,9 +1,11 @@
 import os
+import numpy as np
 from time import time
 import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
+import cv2
 
 from utils import (get_iou, get_mcc, get_f1_score, get_optimiser, parse_args,
                    get_data, get_precision, get_recall)
@@ -41,6 +43,8 @@ def train(
     model,
     train_dataloader,
     val_dataloader,
+    test_dataloader,
+    test_dataset,
     num_epochs,
     device,
     patience,
@@ -66,6 +70,17 @@ def train(
                   f'Precision score: {precision:.3f}. '
                   f'IOU: {iou:.3f}. '
                   f'MCC: {mcc:.3f}. ')
+            acc_dict = perform_validation(model, test_dataloader, device)
+            f1_score = acc_dict['f1']
+            iou = acc_dict['iou']
+            mcc = acc_dict['mcc']
+            precision = acc_dict['precision']
+            recall = acc_dict['recall']
+            print(f'F1 score: {f1_score:.3f}. '
+                  f'Recall score: {recall:.3f}. '
+                  f'Precision score: {precision:.3f}. '
+                  f'IOU: {iou:.3f}. '
+                  f'MCC: {mcc:.3f}. ')
             if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
@@ -73,6 +88,7 @@ def train(
                 torch.save(best_state_dict,
                            os.path.join(args.save_path, 'mask_rcnn.pth'))
                 print(f'Saved model at epoch {epoch}')
+                store_predictions(model, test_dataset, device)
         if init_patience >= patience:
             break
         init_patience += 1
@@ -100,6 +116,27 @@ def perform_train(model, train_dataloader, optimiser, device):
         total_loss += losses
     av_train_loss = total_loss / n
     print(f'Train loss: {av_train_loss}.')
+
+
+def store_predictions(model, test_dataset, device):
+    print('Storing predictions...')
+    model.eval()
+    with torch.no_grad():
+        for i in tqdm(range(len(test_dataset))):
+            img, _ = test_dataset[i]
+            img = img.unsqueeze(0).to(device)
+            mask_filepath = test_dataset.data[i][1]
+            mask_filename = mask_filepath.split('/')[-1]
+            savepath = os.path.join('results/mask_rcnn', mask_filename)
+            predictions = model(img)
+
+            for prediction in predictions:
+                pred_masks = (prediction["masks"] > 0.5).byte()
+                combined_pred_masks = torch.clamp(pred_masks.sum(dim=0), 0, 1)
+                combined_pred_masks = combined_pred_masks.squeeze(dim=0)
+                combined_pred_masks = combined_pred_masks.cpu().numpy()
+                combined_pred_masks = np.where(combined_pred_masks > 0, 255, 0)
+                cv2.imwrite(savepath, combined_pred_masks)
 
 
 def perform_validation(model, val_dataloader, device):
@@ -155,7 +192,7 @@ if __name__ == "__main__":
     image_size = args.image_size
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
-    train_dataloader, val_dataloader, test_dataloader = get_data(
+    train_dataloader, val_dataloader, test_dataloader, test_dataset = get_data(
         batch_size,
         image_size,
         device,
@@ -168,8 +205,8 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                num_epochs, device, patience, val_step,
-                                optimiser)
+                                test_dataloader, test_dataset, num_epochs,
+                                device, patience, val_step, optimiser)
         if best_state_dict:
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mask_rcnn.pth'))
