@@ -1,6 +1,8 @@
 import os
 from time import time
 import torch
+import cv2
+import numpy as np
 from torch.nn.functional import interpolate
 from transformers import SegformerForSemanticSegmentation
 from tqdm import tqdm
@@ -17,7 +19,7 @@ def get_model(device):
 
     label2id = {v: k for k, v in id2label.items()}
 
-    model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b5",
+    model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
                                                              num_labels=2,
                                                              id2label=id2label,
                                                              label2id=label2id)
@@ -32,7 +34,7 @@ def get_model(device):
 
     print(f'model size: {size_all:.3f}MB')
 
-    path = os.path.join(os.getcwd(), args.save_path, 'segformer-b5.pth')
+    path = os.path.join(os.getcwd(), args.save_path, 'segformer-b0.pth')
     if os.path.isfile(path):
         model.load_state_dict(torch.load(path))
         print('Loading pretrained model')
@@ -44,6 +46,7 @@ def train(
     model,
     train_dataloader,
     val_dataloader,
+    test_dataset,
     num_epochs,
     device,
     patience,
@@ -71,10 +74,11 @@ def train(
                   f'Precision: {precision:.3f}. '
                   f'Recall: {recall:.3f}. '
                   f'Loss: {val_loss}')
-            if iou < best_iou:
+            if iou > best_iou:
                 init_patience = 0
                 best_iou = iou
                 best_state_dict = model.state_dict()
+                store_predictions(model, test_dataset, device)
         if init_patience >= patience:
             break
         init_patience += 1
@@ -134,6 +138,7 @@ def perform_validation(model, val_dataloader, device):
             running_iou += get_iou(pred, seg)
             running_mcc += get_mcc(pred, seg)
             running_recall += get_recall(pred, seg)
+            running_precision += get_precision(pred, seg)
 
             n += 1
 
@@ -148,6 +153,28 @@ def perform_validation(model, val_dataloader, device):
     return accuracy
 
 
+def store_predictions(model, test_dataset, device):
+    print('Storing predictions...')
+    with torch.no_grad():
+        for i in tqdm(range(len(test_dataset))):
+            img = test_dataset[i]['pixel_values']
+            img = img.unsqueeze(0).to(device)
+            mask_filepath = test_dataset.data[i][1]
+            mask_filename = mask_filepath.split('/')[-1]
+            savepath = os.path.join('results/segformer-b0', mask_filename)
+            output = model(img)
+            logits = output.logits
+            upsampled_logits = interpolate(logits,
+                                           size=img.shape[-2:],
+                                           mode='bilinear',
+                                           align_corners=False)
+
+            seg = upsampled_logits.argmax(dim=1).double()
+            seg = seg.cpu().numpy()
+            seg = np.where(seg > 0, 255, 0)
+            cv2.imwrite(savepath, seg[0])
+
+
 if __name__ == "__main__":
     args = parse_args()
     num_epochs = args.num_epochs
@@ -158,7 +185,7 @@ if __name__ == "__main__":
     image_size = args.image_size
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
-    train_dataloader, val_dataloader, test_dataloader = get_data(
+    train_dataloader, val_dataloader, test_dataloader, test_dataset = get_data(
         batch_size,
         image_size,
         device,
@@ -168,8 +195,8 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                num_epochs, device, patience, optimiser,
-                                val_step)
+                                test_dataset, num_epochs, device, patience,
+                                optimiser, val_step)
         if best_state_dict:
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mask_rcnn.pth'))
