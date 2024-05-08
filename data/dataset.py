@@ -3,21 +3,27 @@ from torch.utils.data import Dataset
 import numpy as np
 import cv2
 import random
+from pathlib import Path
 
 H = 1830
 W = 1830
 
 
 class BushfireDataset(Dataset):
-    def __init__(self, filepaths, annotations, transform, image_size, device):
-        self.filepaths = filepaths
-        self.annotations = annotations
+    def __init__(self, images_src, masks_src, transform, image_size, device):
         self.image_size = image_size
         self.device = device
         self.transform = transform
+        imgs = list(Path(images_src).glob("**/*.jpg"))
+        masks = list(Path(masks_src).glob("**/*.png"))
+        imgs = {img.stem: img for img in imgs}
+
+        self.data = [[str(imgs[mask.stem]), str(mask)] for mask in masks
+                     if imgs.get(mask.stem)]
+        print('Number of instances:', len(self.data))
 
     def __len__(self):
-        return len(self.filepaths)
+        return len(self.data)
 
     def __getitem__(self, idx):
         pass
@@ -90,10 +96,11 @@ class MaskRCNNDataset(BushfireInstanceSegmentationDataset):
         self.random_crop = random_crop
 
     def __getitem__(self, idx):
-        filepath = self.filepaths[idx]
-        img = cv2.imread(filepath)
+        img_filepath, mask_filepath = self.data[idx]
+        img = cv2.imread(img_filepath)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        mask = self._get_mask(idx, instance_seg=True)
+        mask = cv2.imread(mask_filepath)[:,:,0]
+        #mask = self._get_mask(idx, instance_seg=True)
         if self.random_crop:
             x1, y1, x2, y2 = self._get_random_crop_coords()
             img, mask = img[x1:x2, y1:y2], mask[x1:x2, y1:y2]
@@ -135,9 +142,11 @@ class SegFormerDataset(BushfireDataset):
         self.random_crop = True
 
     def __getitem__(self, idx):
-        filepath = self.filepaths[idx]
-        img = cv2.imread(filepath)
-        mask = self._get_mask(idx, instance_seg=False)
+        img_filepath, mask_filepath = self.data[idx]
+        img = cv2.imread(img_filepath)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        mask = cv2.imread(mask_filepath)[:,:,0]
+        # mask = self._get_mask(idx, instance_seg=False)
         if self.random_crop:
             x1, y1, x2, y2 = self._get_random_crop_coords()
             mask = mask[x1:x2, y1:y2]
@@ -159,9 +168,11 @@ class MobileViTDataset(BushfireDataset):
         self.random_crop = True
 
     def __getitem__(self, idx):
-        filepath = self.filepaths[idx]
-        img = cv2.imread(filepath)
-        mask = self._get_mask(idx, instance_seg=False)
+        img_filepath, mask_filepath = self.data[idx]
+        img = cv2.imread(img_filepath)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        mask = cv2.imread(mask_filepath)[:,:,0]
+        #mask = self._get_mask(idx, instance_seg=False)
         if self.random_crop:
             x1, y1, x2, y2 = self._get_random_crop_coords()
             mask = mask[x1:x2, y1:y2]
@@ -182,9 +193,11 @@ class DeepLabV3Dataset(BushfireDataset):
         self.random_crop = random_crop
 
     def __getitem__(self, idx):
-        filepath = self.filepaths[idx]
-        img = cv2.imread(filepath)
-        mask = self._get_mask(idx, instance_seg=False)
+        img_filepath, mask_filepath = self.data[idx]
+        img = cv2.imread(img_filepath)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        mask = cv2.imread(mask_filepath)[:,:,0]
+        # mask = self._get_mask(idx, instance_seg=False)
         if self.random_crop:
             x1, y1, x2, y2 = self._get_random_crop_coords()
             mask = mask[x1:x2, y1:y2]
