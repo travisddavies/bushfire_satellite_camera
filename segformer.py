@@ -1,4 +1,5 @@
 import os
+from time import time
 import torch
 from torch.nn.functional import interpolate
 from transformers import SegformerForSemanticSegmentation
@@ -16,7 +17,7 @@ def get_model(device):
 
     label2id = {v: k for k, v in id2label.items()}
 
-    model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
+    model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b5",
                                                              num_labels=2,
                                                              id2label=id2label,
                                                              label2id=label2id)
@@ -31,8 +32,10 @@ def get_model(device):
 
     print(f'model size: {size_all:.3f}MB')
 
-    model.load_state_dict(torch.load(os.path.join(args.save_path,
-                                                  'segformer-b5.pth')))
+    path = os.path.join(os.getcwd(), args.save_path, 'segformer-b5.pth')
+    if os.path.isfile(path):
+        model.load_state_dict(torch.load(path))
+        print('Loading pretrained model')
 
     return model.to(device)
 
@@ -171,7 +174,10 @@ if __name__ == "__main__":
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mask_rcnn.pth'))
     else:
+        start = time()
         acc_dict = perform_validation(model, val_dataloader, device)
+        end = time()
+        print(f'FPS: {82 / (end - start)}')
         f1_score = acc_dict['f1']
         iou = acc_dict['iou']
         mcc = acc_dict['mcc']

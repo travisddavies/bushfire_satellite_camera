@@ -1,4 +1,5 @@
 import os
+from time import time
 import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
@@ -173,7 +174,10 @@ if __name__ == "__main__":
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mask_rcnn.pth'))
     else:
+        start = time()
         acc_dict = perform_validation(model, val_dataloader, device)
+        end = time()
+        print(f'FPS: {82 / (end - start)}')
         f1_score = acc_dict['f1']
         iou = acc_dict['iou']
         mcc = acc_dict['mcc']

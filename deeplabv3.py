@@ -1,4 +1,5 @@
 import os
+from time import time
 import torch
 
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
@@ -177,7 +178,10 @@ if __name__ == "__main__":
                        os.path.join(args.save_path, 'deeplabv3.pth'))
     else:
         criterion = MSELoss()
+        start = time()
         acc_dict = perform_validation(model, val_dataloader, criterion, device)
+        end = time()
+        print(f'FPS: {82 / (end - start)}')
         f1_score = acc_dict['f1']
         iou = acc_dict['iou']
         mcc = acc_dict['mcc']
