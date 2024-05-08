@@ -1,4 +1,6 @@
 import os
+import numpy as np
+import cv2
 from time import time
 import torch
 from torch.nn.functional import interpolate
@@ -47,6 +49,7 @@ def train(
     model,
     train_dataloader,
     val_dataloader,
+    test_dataset,
     num_epochs,
     device,
     patience,
@@ -81,6 +84,7 @@ def train(
                 torch.save(best_state_dict,
                            os.path.join(args.save_path, 'mobilevit.pth'))
                 print(f'Saved model at epoch {epoch}')
+            store_predictions(model, test_dataset, device)
         if init_patience >= patience:
             break
         init_patience += 1
@@ -155,6 +159,28 @@ def perform_validation(model, val_dataloader, device):
     return accuracy
 
 
+def store_predictions(model, test_dataset, device):
+    print('Storing predictions...')
+    with torch.no_grad():
+        for i in tqdm(range(len(test_dataset))):
+            img = test_dataset[i]['pixel_values']
+            img = img.unsqueeze(0).to(device)
+            mask_filepath = test_dataset.data[i][1]
+            mask_filename = mask_filepath.split('/')[-1]
+            savepath = os.path.join('results/mobilevit', mask_filename)
+            output = model(img)
+            logits = output.logits
+            upsampled_logits = interpolate(logits,
+                                           size=img.shape[-2:],
+                                           mode='bilinear',
+                                           align_corners=False)
+
+            seg = upsampled_logits.argmax(dim=1).double()
+            seg = seg.cpu().numpy()
+            seg = np.where(seg > 0, 255, 0)
+            cv2.imwrite(savepath, seg[0])
+
+
 if __name__ == "__main__":
     args = parse_args()
     num_epochs = args.num_epochs
@@ -165,7 +191,7 @@ if __name__ == "__main__":
     image_size = args.image_size
     device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
-    train_dataloader, val_dataloader, test_dataloader = get_data(
+    train_dataloader, val_dataloader, test_dataloader, test_dataset = get_data(
         batch_size,
         image_size,
         device,
@@ -175,11 +201,11 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                num_epochs, device, patience, val_step,
-                                optimiser)
+                                test_dataset, num_epochs, device, patience,
+                                optimiser, val_step)
         if best_state_dict:
             torch.save(best_state_dict,
-                       os.path.join(args.save_path, 'mask_rcnn.pth'))
+                       os.path.join(args.save_path, 'mobilevit.pth'))
     else:
         start = time()
         acc_dict = perform_validation(model, val_dataloader, device)
