@@ -168,8 +168,8 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                num_epochs, device, patience, val_step,
-                                optimiser)
+                                num_epochs, device, patience, optimiser,
+                                val_step)
         if best_state_dict:
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mask_rcnn.pth'))
