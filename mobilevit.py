@@ -8,7 +8,8 @@ from transformers import MobileViTForSemanticSegmentation
 from tqdm import tqdm
 
 from utils import (parse_args, get_optimiser, get_f1_score, get_mcc, get_iou,
-                   get_data, get_precision, get_recall)
+                   get_data, get_precision, get_recall, get_best_iou,
+                   record_best_iou)
 
 
 def get_model(device):
@@ -49,6 +50,7 @@ def train(
     model,
     train_dataloader,
     val_dataloader,
+    test_dataloader,
     test_dataset,
     num_epochs,
     device,
@@ -59,6 +61,8 @@ def train(
     best_state_dict = None
     best_iou = 0
     init_patience = 0
+    recorded_dict = get_best_iou('mobilevit')
+    best_iou = recorded_dict['iou']
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}')
@@ -84,7 +88,10 @@ def train(
                 torch.save(best_state_dict,
                            os.path.join(args.save_path, 'mobilevit.pth'))
                 print(f'Saved model at epoch {epoch}')
-            store_predictions(model, test_dataset, device)
+                recorded_dict = acc_dict
+                recorded_dict.pop('loss')
+                store_prediction(model, test_dataset, device)
+                record_best_iou('mobilevit', recorded_dict)
         if init_patience >= patience:
             break
         init_patience += 1
@@ -159,7 +166,7 @@ def perform_validation(model, val_dataloader, device):
     return accuracy
 
 
-def store_predictions(model, test_dataset, device):
+def store_prediction(model, test_dataset, device):
     print('Storing predictions...')
     with torch.no_grad():
         for i in tqdm(range(len(test_dataset))):
@@ -201,8 +208,8 @@ if __name__ == "__main__":
 
     if args.train_mode:
         best_state_dict = train(model, train_dataloader, val_dataloader,
-                                test_dataset, num_epochs, device, patience,
-                                optimiser, val_step)
+                                test_dataloader, test_dataset, num_epochs,
+                                device, patience, optimiser, val_step)
         if best_state_dict:
             torch.save(best_state_dict,
                        os.path.join(args.save_path, 'mobilevit.pth'))
