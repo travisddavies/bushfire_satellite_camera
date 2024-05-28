@@ -8,7 +8,8 @@ from tqdm import tqdm
 import cv2
 
 from utils import (get_iou, get_mcc, get_f1_score, get_optimiser, parse_args,
-                   get_data, get_precision, get_recall)
+                   get_data, get_precision, get_recall, get_best_iou,
+                   record_best_iou)
 
 
 def get_model(device):
@@ -54,23 +55,14 @@ def train(
     best_state_dict = None
     best_iou = 0
     init_patience = 0
+    recorded_dict = get_best_iou('mask_rcnn')
+    best_iou = recorded_dict['iou']
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}')
         perform_train(model, train_dataloader, optimiser, device)
         if epoch % val_step == 0:
             acc_dict = perform_validation(model, val_dataloader, device)
-            f1_score = acc_dict['f1']
-            iou = acc_dict['iou']
-            mcc = acc_dict['mcc']
-            precision = acc_dict['precision']
-            recall = acc_dict['recall']
-            print(f'F1 score: {f1_score:.3f}. '
-                  f'Recall score: {recall:.3f}. '
-                  f'Precision score: {precision:.3f}. '
-                  f'IOU: {iou:.3f}. '
-                  f'MCC: {mcc:.3f}. ')
-            acc_dict = perform_validation(model, test_dataloader, device)
             f1_score = acc_dict['f1']
             iou = acc_dict['iou']
             mcc = acc_dict['mcc']
@@ -88,7 +80,9 @@ def train(
                 torch.save(best_state_dict,
                            os.path.join(args.save_path, 'mask_rcnn.pth'))
                 print(f'Saved model at epoch {epoch}')
-                store_predictions(model, test_dataset, device)
+                store_prediction(model, test_dataset, device)
+                recorded_dict = acc_dict
+                record_best_iou('mask_rcnn', recorded_dict)
         if init_patience >= patience:
             break
         init_patience += 1
@@ -118,7 +112,7 @@ def perform_train(model, train_dataloader, optimiser, device):
     print(f'Train loss: {av_train_loss}.')
 
 
-def store_predictions(model, test_dataset, device):
+def store_prediction(model, test_dataset, device):
     print('Storing predictions...')
     model.eval()
     with torch.no_grad():
